@@ -17,10 +17,17 @@ Two constraints came with the ruling, both load-bearing:
 1. **When the gate cannot reach `skillstack`, it must refuse to exclude
    anything, loudly, and say why.** A lookup that failed and a lookup that
    found no differences must never produce the same outcome.
-2. **The pack version and pack identity are themselves read from the project's
-   manifest**, so a change can point at a different pack version whose hashes
-   suit it. Whatever is built has to account for that, or the lookup just
-   moves the forgery one field over.
+2. **The pack version and pack identity would themselves be read from the
+   project's manifest**, so a change could point at a different pack version
+   whose hashes suit it. Whatever is built has to account for that, or the
+   lookup just moves the forgery one field over.
+
+   This constraint names a **danger to be closed, not a design to be
+   implemented.** Read as an instruction it says the opposite of what it
+   means. The closure is in section 4: identity is taken from the manifest on
+   the target branch, never from the change under review. A builder who
+   implements the ruling and stops before the next section will build the
+   exact hole the constraint was warning about.
 
 Also settled, and not to be reopened: **a human reading the manifest diff is
 not the control.** It was considered and rejected as the primary mechanism,
@@ -54,8 +61,9 @@ the unreachable case specified rather than left to the implementation.
 These are consequences of the ruling, not part of it, and they are recorded
 here because section 4 depends on them:
 
-- **The lookup key is the pack version, resolved to an immutable annotated
-  tag.** It is not the recorded commit. This repository's history was rebuilt
+- **The lookup key is the pack name together with the pack version**,
+  resolved to an immutable annotated tag named `<pack>-v<version>`. Not the
+  version alone: two packs at `0.1.0` would collapse onto one release. It is not the recorded commit. This repository's history was rebuilt
   into a single root commit on 2026-08-19 to strip private paths and names
   before publishing, which orphaned every commit sha existing clones held. A
   recorded commit sha is therefore not a durable reference: an unauthenticated

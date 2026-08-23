@@ -129,9 +129,11 @@ Conceptually, replacing `bin/vendor-skills.sh` with something that:
 3. Keeps the existing manifest mechanics that already work: per-file
    sha256 of on-disk content, a refusal to overwrite a file whose disk hash
    no longer matches what was recorded (a hand edit), and a `--forget`-style
-   deliberate override that never deletes anything and re-records only the
-   on-disk hash, never the shipped hash — closing gap 3 by giving every
-   project the same corrected content, recorded the same way, from one source.
+   deliberate override that never deletes anything and re-records that one
+   hash — closing gap 3 by giving every project the same corrected content,
+   recorded the same way, from one source. Schema 4 carries one hash per file
+   and it serves the tool alone; no gate reads it, so there is no second
+   hash for `--forget` to disturb.
 4. Publishing a new pack version, or moving to a newer upstream commit, has
    to be something every project can pick up without hand-copying files again
    — this is the propagation gap. The mechanism for that (a re-run of the
@@ -160,46 +162,114 @@ review; it asks `skillstack` for the hashes that pack version actually
 shipped. Schema 3, described in earlier revisions of this document, proposed
 the opposite and is withdrawn. What follows is a contract, not a proposal.
 
-### The trust model, which the rest of this section only implements
+### The trust model
 
-Three rules. Every mechanism below exists to serve one of them, and a reader
-that keeps them straight can re-derive the rest.
+Three rules. They constrain **inputs**: what a gate is allowed to believe, and
+from where.
 
 1. **Anything the change under review can write is evidence, never
    authority.** Every field in `.vendored-skills.json` lives in the project
    repository, so the same change that edits a skill file can edit any field
-   that would have vouched for it. This is not a flaw in a particular field.
-   It is true of the file, and of any file a pull request can reach.
-2. **Exclusion scope comes from the target branch.** What may be excluded is
-   decided by the manifest already merged into the branch being merged into.
-   The proposed manifest is compared against that baseline and is never read
-   as the source of scope or identity.
-3. **Shipped hashes come from `skillstack`, at an immutable release tag.** A
-   pull request can edit its own manifest. It cannot edit what this repository
-   published.
+   that would have vouched for it. This is true of the file, of any file a
+   pull request can reach, and of anything derived from one.
+2. **Exclusion scope and pack identity come from the target branch.** What may
+   be excluded is decided by the manifest already merged into the branch being
+   merged into. The proposed manifest is compared against that baseline and is
+   never read as the source of scope or identity.
+3. **Shipped hashes come from a publishing repository the gate pins, at a
+   release tag the gate derives.** A pull request can edit its own manifest.
+   It cannot edit what a repository it does not control published.
 
-This design has now been defeated three times, each time in the same way: a
-field that a reviewer had not thought of turned out to be writable by the
-change being reviewed, and it was read as authority. First the per-file hash.
-Then `shippedSha256` beside it. Then the `files` array itself, still read as
-authority after the version fields around it had been checked. Rule 1 is the
-general form. Apply it to every new field before adding one.
+**These rules are not self-enforcing, and the mechanisms below do two
+different jobs.** Some implement a rule directly (the input inventory, the
+baseline comparison, the pinned constants). Others exist because a rule can be
+satisfied and the result still be useless or invisible: the naming grammar
+stops two different packs resolving to one tag, the hash arithmetic stops a
+gate that never matches anything, and the outcomes stop a gate that failed
+from reading like a gate that passed. Do not read "it follows from a rule" as
+"therefore it is handled."
+
+**Rule 3's "immutable" is an intention until the host enforces it.** See the
+tag protection requirement below, which is not yet in place.
+
+This design has now been defeated four times, each time the same way: an input
+that nobody had listed turned out to be writable by the change under review,
+and it was read as authority. First the per-file hash. Then `shippedSha256`
+beside it. Then the `files` array, still read as authority after the version
+fields around it had been checked. Then the **publishing repository itself**,
+because the document said "ask `skillstack`" and never said where `skillstack`
+is, so an implementer would have taken the URL from the only repo-shaped field
+available, which lives in the manifest.
+
+That is why the next subsection exists, and why it is a list rather than a
+principle. **A principle you agree with does not enumerate. The inventory
+does.** If the inventory is not exhaustive, defeat five is already here.
+
+### The input inventory
+
+Every input the gate takes. Each is **constant** (compiled into the gate),
+**authority** (trusted, and it must be shown why it cannot be written by the
+change), or **evidence** (read, compared, reported, never trusted).
+
+| Input | Source | Class |
+| --- | --- | --- |
+| Publishing repository host, owner and name | Compiled into the gate | constant |
+| Transport and API endpoints used to reach it | Compiled into the gate | constant |
+| Tag name grammar and hash algorithm | This document | constant |
+| Manifest path `.vendored-skills.json` | Compiled into the gate | constant |
+| Baseline manifest content | The target commit being merged into | authority |
+| Pack name, `packVersion`, `skills`, `files` | The **baseline** manifest | authority |
+| Release tag | Derived from baseline pack name and version | authority |
+| `files.json` and its hashes | The pinned repository, at that tag | authority |
+| Proposed manifest content | The commit under review | evidence |
+| `source`, `packCommit`, `upstream.*`, `installedAt` | Either manifest | evidence |
+| File content being checked | The commit under review | evidence |
+| Working tree as checked out | Anywhere | never read |
+| Target ref of the pull request | The hosting platform | authority |
+| The gate's own code and workflow definition | The guardrail toolkit's release | authority |
+
+**The publishing repository is pinned in the gate and is never read from the
+project.** No field in `.vendored-skills.json` names it, contributes to
+naming it, or redirects it. `source` exists as a human label and is evidence;
+a gate that resolves anything from it has reintroduced defeat four. The
+transport is an input too: the API base and the URL shapes are pinned, not
+assembled from manifest values.
+
+`upstream.repo` in a manifest is provenance for a human, never a fetch target.
+
+**Two inputs on that list are authority the gate cannot verify for itself, and
+they are named so that nobody mistakes the list for a closed system.** The
+target ref comes from the hosting platform: a pull request author chooses what
+to target, so a chain of pull requests can end at a branch whose baseline
+manifest the author wrote. What contains that is not this mechanism but the
+requirement that the change eventually reach the protected branch through a
+pull request reviewed against *its* baseline. The gate's own code and its
+workflow definition live in the project repository too, and a change that
+edits them defeats every rule above at once; that is the guardrail toolkit's
+existing problem and it already answers it by pinning the gate script by
+digest. Neither is solved here, both are inputs, and an inventory that omitted
+them would be the same omission that produced defeat four.
+
+**The pinned values themselves live in the gate's source, not in this
+document.** What this document fixes is that they are literals there, reviewed
+as code, and that no project-supplied string reaches them. Stating the policy
+without the literal is deliberate; leaving the policy unstated is what caused
+defeat four.
 
 ### The manifest (`schemaVersion: 4`)
 
 Filename: `.vendored-skills.json` at the project root — the name
 `vendor-skills.sh` already writes and that a vendored-skill guard script in
 one existing project and the maintainer's own decision record already
-reference. Continuity over a fresh name, since three things outside this
-repository already look for it by that name.
+reference. Continuity over a fresh name.
 
 **One hash per file, named `sha256`, and it belongs to the tool, not to the
-gate.** It records what the layering tool last wrote or last accepted on disk.
-It is what makes hand-edit detection and `--forget` work with no network. The
-gate never reads it. Schema 3's second field, `shippedSha256`, is **removed**
-rather than renamed: it was not authoritative, its name asserted that it was,
-and two authoritative-looking fields where only one is authoritative is how
-the previous design was defeated.
+gate.** It records what the layering tool last wrote or last accepted on disk,
+and it is what makes hand-edit detection and `--forget` work with no network.
+The gate never reads it. Schema 3's second field, `shippedSha256`, is
+**removed** rather than renamed: it was not authoritative, its name asserted
+that it was, and two authoritative-looking fields where only one is
+authoritative is how an earlier version of this design was defeated.
 
 ```json
 {
@@ -231,46 +301,61 @@ the previous design was defeated.
 }
 ```
 
-**The key under `"packs"` is the pack name, not a skill name.** In the example
-above that is `superpowers`, matching `packs/superpowers/pack.json`, while
+**The key under `"packs"` is the pack name, not a skill name.** Above that is
+`superpowers`, matching `packs/superpowers/pack.json`, while
 `test-driven-development` is one of the skills that pack contains. Earlier
-revisions of this document used a skill name as the key, which taught the
-wrong lookup key for the field the gate resolves a release by.
+revisions used a skill name as the key, which taught the wrong lookup key for
+the field a gate resolves a release by.
 
-**There is no `packTag` field, deliberately.** The release tag is derived from
-the pack name and pack version (see below), never read from the manifest. A
-tag name the project supplies is one more thing the change under review can
-write, which rule 1 forbids.
+**There is no `packTag` field, deliberately**, and no field naming a
+repository. Both would be inputs the change under review can write.
 
-`packCommit` is **audit-only**. It answers "which commit was this cut from"
-for a human reading history. Nothing resolves it, nothing verifies against it,
-and forging it gains nothing. The commit a gate reports as authoritative is
-the one it resolved from the release tag, not this field.
+`packCommit`, `source`, `upstream` and `installedAt` are **evidence**: they are
+reported for audit and never resolved. The commit a gate reports as
+authoritative is the one it resolved from the release tag.
 
 `schemaVersion` history: **1** is the undocumented shape `vendor-skills.sh`
 writes today, keyed by repository URL under `"vendored"`, one hash per path,
-no pack concept. **2** and **3** were proposals in earlier revisions of this
-document and are withdrawn; 3 in particular carried `shippedSha256` and told
-gates to exclude on it, which is now known to be unsound. A reader must treat
-a manifest with no `schemaVersion` as schema 1, and must not apply the rules
-below to any version it does not recognise.
+no pack concept, and it is what every real manifest in existence holds right
+now. **2** and **3** were proposals in earlier revisions and are withdrawn.
+
+### Naming grammar
+
+Pack name and version are interpolated into a tag name and a repository path,
+so without a grammar two different packs can produce one tag. A gate must
+reject anything that does not match, before interpolating.
+
+- **Pack name:** `^[a-z][a-z0-9]*(-[a-z0-9]+)*$`, and additionally **must not
+  contain the substring `-v` followed by a digit**.
+- **Pack version:** `^[0-9]+\.[0-9]+\.[0-9]+$`. Exactly three numeric
+  components, no prefix, no suffix, no pre-release part.
+
+Together these make `<pack>-v<version>` unambiguous: the version always begins
+with a digit immediately after `-v`, and a pack name may never contain that
+sequence. Without both halves, pack `foo` at version `bar-v1.0` and pack
+`foo-vbar` at version `1.0` produce the same string. The version rule alone
+rejects the first; the pack-name rule alone rejects the second; both are
+needed.
+
+A pack name or version failing its rule is an integrity failure. The gate
+excludes nothing for that pack and says which rule failed.
 
 ### Path normalization
 
 Before any comparison — duplicate detection, allowed-location checks, or
-hash lookup — a reader must normalize every path string the same way:
+hash lookup — a reader normalizes every path string the same way:
 
 1. Replace backslashes with forward slashes.
-2. If the path is absolute, reject the whole manifest (see integrity rules).
+2. If the path is absolute, reject the whole manifest.
 3. Strip a leading `./` if present.
 4. Collapse every run of two or more `/` characters to a single `/`.
 5. Reject if any path segment is `..` or empty.
 6. Reject if the path ends with `/` (these entries name files, not
    directories).
 
-Two spellings that normalize to the same string are the same path. A reader
-must apply normalization before deciding whether a path appears twice or
-whether a working-tree file is listed.
+Two spellings that normalize to the same string are the same path. Normalize
+before deciding whether a path appears twice, and before looking a path up in
+the tree of any commit.
 
 ### Allowed locations
 
@@ -292,43 +377,43 @@ redundant. That rests on a loader-trace measurement taken on 2026-08-17 and
 this document. It is the load-bearing fact for the narrowing, so it is being
 re-measured under DAR-157 and the transcripts will be recorded with that
 decision. **If the re-measurement contradicts it, this rule is what changes.**
-A schema 4 manifest naming a `.cursor/` path was not written by this tool and
-the reader rejects it. Schema 1 manifests predate all of this and are governed
-by their own (absent) rules, not by these.
 
 Anything else — including project source, configuration, or a skill directory
 not named in `"skills"` — is not pack content for this mechanism even if
-someone added a matching hash. A reader that finds a disallowed path must
-reject the whole manifest and exclude nothing.
+someone added a matching hash.
 
-### Resolving shipped hashes from `skillstack`
+### Resolving the release
 
-**The release tag.** Cutting a pack version creates an annotated tag named
-`<pack>-v<packVersion>`, so pack `superpowers` at version `0.1.0` is
-`refs/tags/superpowers-v0.1.0`. A reader derives that name from the pack name
-and version in the manifest and resolves that exact ref. It does not accept a
-tag name from the manifest, does not fall back to a branch, and does not fall
-back to `packCommit`.
+**The publishing repository is a constant in the gate.** For this pack family
+it is the repository this document lives in. The gate carries its host, owner
+and name as compiled-in literals, alongside the API base and the URL shapes it
+uses. Changing any of them is a change to the gate, reviewed as code. Nothing
+in a project manifest reaches them, contributes to building them, or redirects
+them.
+
+**The release tag** is `<pack>-v<packVersion>`, built from the pack name and
+`packVersion` **taken from the baseline manifest**, after both pass the naming
+grammar. So pack `superpowers` at `0.1.0` is `refs/tags/superpowers-v0.1.0`.
+The gate resolves that exact ref. It does not accept a tag name from any
+manifest, does not fall back to a branch, and does not fall back to
+`packCommit`.
 
 **Tags are cut on the merged commit, after merge, never before.** This
 repository publishes by squash merge, and a squash merge creates a commit that
 does not exist until the merge happens. A tag cut on a pre-merge commit names
-an object that the merge orphans. This is not hypothetical: rebuilding this
-repository's history on 2026-08-19 orphaned every commit sha that existing
-clones held, and an unauthenticated fetch of one of those shas returns HTTP
-404 — the same status an unreachable repository returns.
+an object the merge orphans. Not hypothetical: rebuilding this repository's
+history on 2026-08-19 orphaned every commit sha existing clones held, and an
+unauthenticated fetch of one of those shas returns HTTP 404, the same status
+an unreachable repository returns.
 
 **REQUIRED, and not yet in place: a tag protection rule on this repository.**
 A tag is only immutable if the host enforces it. The rule must forbid both
-rewriting and deleting any tag matching `*-v*`. Without it, "immutable release
-tag" is a description of intent rather than a property, and the whole
-mechanism rests on it. Creating the rule is a repository setting and therefore
-the maintainer's call, not something this document or the tool can do. As of
-this writing this repository has **no tags and no rulesets**, so the mechanism
-has nothing to resolve yet; see "release not found" below, which is the state
-every project is in until the first tag exists.
+rewriting and deleting any tag matching `*-v*`. Creating it is a repository
+setting and therefore the maintainer's call. As of this writing this
+repository has **no tags and no rulesets**, so until that changes every
+project resolves `release not found` and nothing is excluded anywhere.
 
-**The published hash map.** At each release tag, this repository carries
+**The published hash map.** At each release tag this repository carries
 `packs/<pack>/files.json`:
 
 ```json
@@ -338,131 +423,185 @@ every project is in until the first tag exists.
   "packVersion": "0.1.0",
   "packCommit": "<sha>",
   "files": {
-    "test-driven-development/SKILL.md": "<sha256>"
+    "test-driven-development/SKILL.md": "<sha256 of the file's content bytes>"
   }
 }
 ```
 
-**Keys are pack-relative, not project-relative.** This is what keeps the
-published list independent of how many directories a project lays skills into:
-a project that took two directories and one that took three check against the
-same map, and changing the layout cannot invalidate a published pack. A reader
-maps a project path to a pack-relative key by stripping the
-`.claude/skills/` or `.agents/skills/` prefix. One fetch per pack, not one per
-file.
+**Keys are pack-relative, not project-relative.** This keeps the published
+list independent of how many directories a project lays skills into: a project
+that took two directories and one that took three check against the same map,
+and changing the layout cannot invalidate a published pack. A project path
+maps to a key by stripping the `.claude/skills/` or `.agents/skills/` prefix.
+One fetch per pack, not one per file.
 
-Release-time validation, which is the pack-cutting step's obligation and not
-the gate's: `files.json` must be the complete and exact hash map of everything
-under `packs/<pack>/skills`, and its `packVersion` must match the tag it is
-published under. A file omitted from the map is not excluded by any gate, so
-an omission fails safe, but it still means the map is wrong.
+A fetched `files.json` whose `pack` or `packVersion` does not match the tag it
+was fetched under is treated as `release incomplete`, not as a hash source.
 
-**What a hash in this map does and does not prove.** It proves the bytes on
-disk are the bytes this repository published at that release. It does not
-prove the pack was correctly reviewed, that its corrections are complete, that
-it is licence-compliant, that it was really derived from the upstream commit
-it names, or that this repository was not itself compromised. Fetching and
-hashing each remote file rather than trusting the map adds nothing against
-those, because the bytes and the map come from the same authority.
+Release-time validation, an obligation of the pack-cutting step and not of the
+gate: `files.json` must be the complete and exact map of everything under
+`packs/<pack>/skills`. A file omitted from the map is never excluded by a
+gate, so an omission fails safe, but the map is still wrong.
+
+**What a hash in this map proves.** That the bytes checked are the bytes this
+repository published at that release. Not that the pack was correctly
+reviewed, that its corrections are complete, that it is licence-compliant,
+that it really derives from the upstream commit it names, or that this
+repository was not itself compromised. Fetching and hashing each remote file
+rather than trusting the map adds nothing against those, because bytes and map
+come from the same authority.
+
+### The hash: exactly which number
+
+**`files.json` stores the SHA-256 of the file's content bytes. That is also
+what the gate computes. It is not a git object id.**
+
+This is stated at length because the earlier wording, "hash the git blob," is
+wrong arithmetic for the right intention and would produce a gate that never
+matches anything. Git prefixes `blob <length>\0` to the content and, by
+default, hashes that with SHA-1. Measured:
+
+    file content                      hello\n
+    SHA-256 of those bytes            5891b5b522d5df086d0ff0b110fbd9d21bb4fc7163af34d08286a2e846f6be03
+    git object id (git hash-object)   ce013625030ba8dba906f756967f9e9ca394464a
+
+Different lengths, different algorithms, different inputs. A gate comparing
+one to the other excludes nothing, forever, and reports it as "nothing needed
+excluding."
+
+**The intention behind the earlier wording stands and is why this is not
+simply "hash the file."** A working-tree read is divertible: by a symlink, by
+a clean/smudge filter, by line-ending conversion, or by a checkout that never
+produced the file faithfully. So:
+
+1. Read the **content of the object git records for that path at the commit
+   under review**, not the working tree.
+2. Compute SHA-256 over those bytes.
+3. Compare to the map.
+
+Reject any path whose entry at that commit is not a regular file blob. A
+symlink, a gitlink or a submodule entry at a path the manifest names is an
+anomaly, never pack content, and is never excluded.
 
 ### What the gate determines, and in what order
 
-1. **Read the baseline manifest** — `.vendored-skills.json` as it exists on
-   the actual target commit being merged into, not on the pull request's merge
-   base and not on the working tree. For a merge from another branch these
-   differ, and the target commit is the one whose contents a merge actually
-   accepts. This baseline is the sole source of exclusion scope and pack
+Every tree read below is named explicitly. There is no step that reads "the
+project" or "the file" without saying which commit.
+
+1. **Read the baseline manifest** at the actual target commit being merged
+   into — not the merge base, not the working tree. For a merge from another
+   branch these differ, and the target commit is the one whose contents a
+   merge actually accepts. This is the sole source of exclusion scope and pack
    identity.
-2. **Read the proposed manifest** and compare. If the pack set, `packVersion`,
-   `skills` array, or `files` array differ in any way for a pack, **exclude
-   nothing for that pack** and say so. A legitimate pack upgrade therefore
-   gets exactly one full review, which is the correct price: an upgrade
-   changes the content being trusted.
-3. **Resolve the release** for each baseline pack, by derived tag, and fetch
-   its `files.json`.
-4. **Hash and compare.** For each path in the baseline pack's `files`, hash
-   the content and compare to the published map.
-
-**Hash the git blob, not the checked-out file.** Read the object git records
-for that path at the commit under review. A working-tree read can be diverted
-by a symlink, by a filter or a line-ending conversion, or by a file the
-checkout never produced faithfully. Reject any path whose git object is not a
-regular file blob: a symlink, a gitlink, or a submodule entry at a path the
-manifest names is an anomaly, not pack content, and it is never excluded.
-
-Excluded only when: the pack identity is unchanged from the baseline, the
-release resolved, and the blob hash equals the published hash. Everything
-else is in scope.
+2. **Read the proposed manifest** at the commit under review, as evidence, and
+   compare. For each pack in the baseline: if the pack is absent from the
+   proposed manifest, or its `packVersion`, `skills` array or `files` array
+   differ in any way, **exclude nothing for that pack** and say so. A
+   legitimate pack upgrade therefore gets exactly one full review, which is
+   the correct price: an upgrade changes the content being trusted.
+   **Deleting the manifest, or replacing it with one that has no packs, is
+   this case, not `not applicable`.** `not applicable` is only ever reached
+   when the baseline has no packs.
+3. **Validate** the baseline pack against the naming grammar, allowed
+   locations and integrity rules.
+4. **Probe the pinned repository for reachability**, then resolve the derived
+   tag, then fetch `files.json` at it. Three separate results; see below.
+5. **Hash and compare** each path in the baseline pack's `files`, reading the
+   object at the commit under review, per the section above.
 
 ### The outcomes, which must never print the same result
 
 A check that could not run and a check that found nothing wrong are the same
-clean line unless the tool takes care to make them different. Five outcomes,
-five distinct messages:
+clean line unless the tool makes them different. Each outcome below has
+**exactly one cause**. Where a condition has several causes they are separate
+outcomes, because "which of three things went wrong" is the operator's next
+question and a shared label deletes the answer.
 
-- **`not applicable`** — the project has no `.vendored-skills.json`, or it has
-  no packs. Nothing to exclude and nothing wrong. This must not read as a
-  failure.
-- **`lookup failed`** — `skillstack` could not be reached at all. Refuse to
-  exclude anything, loudly, and name the cause. An anonymous caller cannot
-  distinguish a private repository from one that does not exist, and does not
-  need to: both mean the source is unreachable.
-- **`release not found`** — `skillstack` was reachable and the derived tag does
-  not exist there. Refuse to exclude anything for that pack, loudly. This is a
-  different operator problem from `lookup failed` — a missing release versus a
-  missing source — and it is the state every project is in until the first tag
-  is cut, so it is the first case to test.
-- **`in scope`** — a listed file's hash does not match the published map, or
-  the pack identity changed in this pull request, or the manifest failed an
-  integrity rule. Reviewed normally, with the reason stated.
-- **`excluded`** — say how many files, for which pack, at which version, and
-  which release commit the hashes came from. "Why was this excluded" must
-  answer with a name, a version and a resolved commit, never with "a manifest
-  said so."
+Kit words these lines, but that it must be able to tell them apart is part of
+this contract, not an implementation detail left to the reader.
+
+**Nothing to do:**
+
+- **`not applicable — no packs`** — the baseline manifest is absent, or is
+  present with an empty `packs` object. Nothing to exclude and nothing wrong.
+- **`unsupported schema`** — the baseline manifest has `schemaVersion` other
+  than 4, or none (which means schema 1). Not an error and not a pass:
+  schema 1 is what every real manifest holds today, and it is outside this
+  mechanism entirely. Excludes nothing, reports the version found.
+
+**Refused, and why:**
+
+- **`manifest rejected`** — an integrity rule, naming grammar rule or
+  allowed-location rule failed. Names the rule and the offending value.
+- **`identity changed`** — the proposed manifest differs from the baseline for
+  this pack. Names which field.
+- **`lookup failed`** — the reachability probe against the pinned repository
+  did not succeed. The source could not be consulted. Never conflated with any
+  answer the source might have given.
+- **`release not found`** — reachability proved, and the derived tag does not
+  exist in the pinned repository. A missing release, not a missing source.
+- **`release incomplete`** — the tag exists and `files.json` is missing,
+  unparseable, or names a `pack` or `packVersion` that disagrees with the tag.
+
+**The reachability probe exists so those last three are distinguishable.** An
+anonymous 404 covers a missing tag, a private repository and a repository that
+does not exist, so a gate that reads only the tag request cannot tell them
+apart. Probe the repository itself first, by a request that returns a distinct
+success when the repository is visible. Only after that succeeds may a 404 on
+the tag be read as `release not found`. If the probe fails, the outcome is
+`lookup failed` regardless of what any later request returns, and the gate
+does not guess whether the repository is private or absent: both mean the
+source is unusable and neither is actionable differently.
+
+**Per file:**
+
+- **`in scope — hash mismatch`** — the path is in the published map and the
+  computed SHA-256 differs.
+- **`in scope — not published`** — the path is in the baseline `files` and
+  absent from the published map.
+- **`in scope — not a regular file`** — the entry at that path is a symlink,
+  gitlink or submodule.
+- **`in scope — deleted`** — the baseline names the path and the commit under
+  review has no entry for it.
+- **`excluded`** — all checks passed. Reports the count, the pack, the version,
+  and the release commit the tag resolved to. "Why was this excluded" answers
+  with a name, a version and a resolved commit, never "a manifest said so."
 
 A force-pushed pull request is re-evaluated against its new commit. A prior
 result is never reused, because the commit it described no longer exists.
 
-### Integrity rules a reader must apply before trusting the file at all
+### Integrity rules a reader applies before trusting a manifest at all
 
-Modeled on the rules kit's own `BUILD-SPEC.md` states for `.kit/manifest.json`,
-because the failure mode is identical: a manifest a reader trusts blindly is a
-manifest an editor can make say anything.
+A manifest failing any of these means every file is reviewed normally — the
+same posture as if it did not exist.
 
-- **Invalid JSON: reject the whole file, exclude nothing.** Do not guess at a
-  partial read.
-- **A path is absolute, contains a `..` segment, or fails normalization:
-  reject the whole file, exclude nothing.**
-- **The same normalized path appears under more than one pack, or twice in
-  one pack's `files` array: reject the whole file, exclude nothing.**
-  Ownership of a path by two packs at once needs a human decision, not a guess.
-- **A path fails the allowed-location rules above: reject the whole file,
-  exclude nothing.**
-- **A file entry is missing `path` or `sha256`, or carries a `shippedSha256`
-  field: reject the whole file, exclude nothing.** The removed field is
+- **Invalid JSON: reject.** Do not guess at a partial read.
+- **A required field is missing: reject.** For each pack, all of `source`,
+  `packVersion`, `skills` and `files` must be present, and every file entry
+  must have `path` and `sha256`. A pack missing `packVersion` would otherwise
+  derive the tag `superpowers-v` with nothing after it and resolve nothing.
+- **A file entry carries `shippedSha256`: reject.** The removed field is
   rejected rather than ignored, so a schema 3 manifest mislabeled as schema 4
   fails loudly instead of being read under rules it was not written for.
-- **An unrecognized `schemaVersion`: treat as untrusted for this mechanism**
-  rather than partially interpreting a shape the reader was not built for.
-
-A manifest that fails any of these means the reader reviews every file
-normally — the same posture as if the manifest did not exist. Failing closed
-here is the posture kit already takes with its own manifest.
+- **A path is absolute, contains `..`, or fails normalization: reject.**
+- **The same normalized path appears under more than one pack, or twice in one
+  pack's `files`: reject.** Ownership by two packs needs a human decision.
+- **A path fails the allowed-location rules: reject.**
+- **Pack name or `packVersion` fails the naming grammar: reject.**
 
 ### What this shape does not attempt to solve here
 
-- **How kit implements any of this** — where the gate caches a fetch, whether
-  it carries its own hashing logic or shells out to something this repository
-  ships, and how it words each of the five outcomes. Kit-side design work,
-  out of scope for this repository.
+- **How kit implements this** — caching, retry and backoff, and the exact
+  wording of each outcome line. The set of outcomes and their distinctness is
+  contract; the phrasing is not.
 - **Whether `schemaVersion: 1` files need a migration path** written by this
-  tool, versus being left alone until the project re-runs the tool and gets
-  upgraded. Not decided here.
+  tool, versus being left alone until the project re-runs the tool. Not
+  decided here. Until then they report `unsupported schema`.
 - **A compromised `skillstack`, or a direct push to a project's target
   branch.** Both defeat this design, and both defeat every alternative
-  considered, because each removes the authority the gate is resting on rather
-  than tricking it. They are answered by protecting the release-writing path
-  and the target branch, not by anything in this file.
+  considered, because each removes the authority the gate rests on rather than
+  tricking it. They are answered by protecting the release-writing path and
+  the target branch, not by anything in this file.
 
 ## 5. Does skillstack install kit into itself?
 
@@ -578,7 +717,8 @@ lists, for the same reason.
 
 2. **Whether `.vendored-skills.json`'s filename should change** now that its
    schema is a breaking change from what it holds today (repository-keyed,
-   no pack concept) to what section 4 proposes (pack-keyed, with pack version
-   and upstream provenance nested). This document recommends keeping the name
-   for continuity with the three things that already reference it by that
-   name, but that is a recommendation, not a settled call.
+   no pack concept) to the pack-keyed schema 4 that section 4 sets out. This
+   document recommends keeping the name for continuity with the three things
+   that already reference it by that name, but that is a recommendation, not
+   a settled call. It is the only part of section 4 still open; the shape
+   itself is settled.

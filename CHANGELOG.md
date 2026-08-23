@@ -9,6 +9,33 @@ text under it.
 
 ## [Unreleased]
 
+- Cross-family review round on the section 4 contract: sixteen findings, of
+  which two would each have made the mechanism useless. **The publishing
+  repository was never named** anywhere in the document, so a builder needed a
+  URL and the only repo-shaped fields available live in the project's own
+  manifest; a change could then point the lookup at a repository it controls.
+  That is the fourth time this design has been defeated by an unlisted input
+  being read as authority, and it is answered by an explicit **input
+  inventory** that classes every input as constant, authority or evidence,
+  including the transport, the tag name, the manifest path, the target ref and
+  the gate's own code. **The hash arithmetic was wrong:** `files.json` stores
+  a SHA-256 of file bytes while the text said to hash the git blob, which is a
+  SHA-1 over `blob <len>\0` plus content. Measured, and different in length,
+  algorithm and input, so a gate built from the old wording would have matched
+  nothing, excluded nothing, and reported it as nothing needing exclusion. The
+  intent (never read the working tree, which a symlink or filter can divert)
+  is kept and the arithmetic corrected: read the object's content at the
+  commit under review, then SHA-256 those bytes. Adds a naming grammar so
+  `<pack>-v<version>` cannot collide, a reachability probe so `lookup failed`
+  and `release not found` are distinguishable behind an anonymous 404, and
+  `release incomplete` for a tag whose map is missing or disagrees with it.
+  Splits the outcomes so each has exactly one cause, including a real outcome
+  for `schemaVersion: 1`, which is what every manifest in existence holds
+  today and previously had none. Requires the identity fields at integrity
+  time, since a pack without `packVersion` derived the tag `superpowers-v`.
+  Stops claiming every mechanism implements one of the three trust rules,
+  which was false.
+
 - Section 4 of `docs/SPEC.md` rewritten as a settled contract rather than a
   proposal, implementing the maintainer's 2026-08-20 ruling that the merge
   gate asks this repository for shipped hashes instead of trusting the copy in
