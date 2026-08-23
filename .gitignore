@@ -1,0 +1,22 @@
+# OS noise
+.DS_Store
+
+# Editor state
+*.swp
+*.swo
+
+# Local scratch. Upstream stacks are cloned to a system tmpdir when the tool
+# runs, never into the repo, but this covers a manual clone done by hand while
+# working on the tool.
+/tmp/
+/scratch/
+/.vendor-clone/
+
+# Python
+__pycache__/
+*.pyc
+
+# A locally exported bundle build, if the future tool stages one before
+# committing it.
+/dist/
+/build/

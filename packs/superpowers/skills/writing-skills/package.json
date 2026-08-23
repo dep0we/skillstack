@@ -1,0 +1,6 @@
+{
+  "name": "writing-skills-scripts",
+  "private": true,
+  "type": "module",
+  "description": "Scopes render-graphs.js to ES modules. Upstream declares this at its repository root, which the import does not copy, so the script fails without this file on any runtime that defaults to CommonJS."
+}

@@ -1,0 +1,238 @@
+{
+  "schemaVersion": 1,
+  "pack": "superpowers",
+  "packVersion": "0.1.0",
+  "upstream": {
+    "repo": "https://github.com/obra/superpowers",
+    "subdir": "skills",
+    "commit": "b36e0829c6d0140e93cfef2ca599b1b07d4a7797"
+  },
+  "corrections": [
+    {
+      "id": "no-delete-uncommitted-work",
+      "files": [
+        "test-driven-development/SKILL.md",
+        "writing-skills/SKILL.md",
+        "writing-skills/persuasion-principles.md",
+        "writing-skills/testing-skills-with-subagents.md"
+      ],
+      "wasWrong": "Seven live instructions told an agent to delete code written before its test, with no exceptions. The same wording appeared in the test-first skill, the skill-authoring skill (including two template blocks authors copy into new skills), the persuasion-principles example, and the subagent-testing guide.",
+      "nowSays": "Every instance now tells the agent to stop and tell the maintainer, who decides whether to keep the work and add tests or start over. The agent must never delete the maintainer's code or any uncommitted work.",
+      "foundBy": [
+        "project-a",
+        "project-b",
+        "project-c"
+      ],
+      "disagreement": null
+    },
+    {
+      "id": "no-local-merge",
+      "file": "finishing-a-development-branch/SKILL.md",
+      "wasWrong": "The finishing skill offered to merge a feature branch locally as option 1 on a three-option menu.",
+      "nowSays": "The menu has two options only: push and open a pull request, or keep the branch. Merging is reserved for the maintainer; every change ends at a pull request.",
+      "foundBy": [
+        "project-a"
+      ],
+      "disagreement": "Only project-a corrected this. project-b and project-c still carry upstream wording."
+    },
+    {
+      "id": "no-guess-test-command",
+      "files": [
+        "finishing-a-development-branch/SKILL.md",
+        "using-git-worktrees/SKILL.md"
+      ],
+      "wasWrong": "Step 1 named example test commands (npm test, cargo test, pytest, go test) and invited guessing when none was recorded.",
+      "nowSays": "Run the test command this project records. If none is recorded, say so and move on. Do not guess or invent a command.",
+      "foundBy": [
+        "project-a"
+      ],
+      "disagreement": "Only project-a corrected finishing-a-development-branch. using-git-worktrees still carried upstream guessed commands until this pack fix."
+    },
+    {
+      "id": "no-print-env-values",
+      "files": [
+        "systematic-debugging/SKILL.md",
+        "systematic-debugging/root-cause-tracing.md"
+      ],
+      "wasWrong": "The debugging skill suggested printing environment variables (including piping env through grep) while tracing failures.",
+      "nowSays": "Log whether a needed variable is set or unset, never its value. Example shell snippets use SET/UNSET checks only; the TypeScript stack-trace example logs SET/UNSET, not the value.",
+      "foundBy": [
+        "project-a"
+      ],
+      "disagreement": "Only project-a corrected this. project-b and project-c still carry upstream wording."
+    },
+    {
+      "id": "no-client-values-in-committed-plans",
+      "files": [
+        "writing-plans/SKILL.md",
+        "brainstorming/SKILL.md"
+      ],
+      "wasWrong": "Planning and brainstorming skills instructed committing design docs and plans without warning that committed files reach the hosting provider and must not carry client-specific values.",
+      "nowSays": "Both skills warn before commit: never write a client's own values (name, domains, region, sizing, purchases). Use an opaque identifier or keep values in the maintainer's notes instead.",
+      "foundBy": [
+        "project-a"
+      ],
+      "disagreement": "Only project-a corrected this. project-b and project-c still carry upstream wording."
+    },
+    {
+      "id": "maintainer-reserved-decisions-and-cap-honesty",
+      "file": "subagent-driven-development/SKILL.md",
+      "wasWrong": "The skill told the controller to decide cap exceedances, maintainer-reserved choices, and load-bearing forks as rulings. At the review cap it marked tasks complete even when findings were still parked. It also instructed deleting the plan workspace at the end.",
+      "nowSays": "Three stop conditions (maintainer-reserved choice, unsettled fork, cap exceedance) require asking the human, not ruling. Tasks that hit the cap with parked findings are recorded as did not converge, not complete. The workspace is left in place when finished; the example workflow says so too.",
+      "foundBy": [
+        "project-a"
+      ],
+      "disagreement": "Only project-a corrected this. project-b and project-c still carry upstream wording."
+    },
+    {
+      "id": "no-client-values-in-scratch-directories",
+      "files": [
+        "subagent-driven-development/SKILL.md",
+        "brainstorming/visual-companion.md"
+      ],
+      "wasWrong": "Scratch directories (.superpowers/sdd workspaces and brainstorming mockups) persist on disk after a run. Upstream treated them as convenient storage without warning that git-ignored is not gone.",
+      "nowSays": "Both locations warn that ignored files outlive the run and must not hold client-specific values. Use opaque identifiers or skip the companion.",
+      "foundBy": [
+        "project-a"
+      ],
+      "disagreement": "Only project-a corrected this. project-b and project-c still carry upstream wording for visual-companion; subagent scratch warning is project-a-only."
+    },
+    {
+      "id": "brainstorm-loopback-only",
+      "files": [
+        "brainstorming/scripts/server.cjs",
+        "brainstorming/scripts/start-server.sh",
+        "brainstorming/visual-companion.md"
+      ],
+      "wasWrong": "The brainstorming companion server spoke plain HTTP with the session key in the URL and documented binding to 0.0.0.0 for remote setups.",
+      "nowSays": "Binding and advertised hostnames are loopback-only; wider binds are refused with guidance to port-forward instead. Remote-bind instructions were removed.",
+      "foundBy": [
+        "project-a"
+      ],
+      "disagreement": "Only project-a corrected loopback binding. project-b added separate CSP and telemetry hardening on server.cjs instead."
+    },
+    {
+      "id": "brainstorm-stop-server-safety",
+      "file": "brainstorming/scripts/stop-server.sh",
+      "wasWrong": "stop-server.sh deleted session directories based on a string prefix match on /tmp, which accepted paths that resolved elsewhere via symlinks or .. segments.",
+      "nowSays": "Refuse symlinks anywhere in the path, validate the directory sits directly under the real /tmp root, and only then delete ephemeral sessions.",
+      "foundBy": [
+        "project-a"
+      ],
+      "disagreement": "Only project-a corrected this. project-b and project-c still carry upstream wording."
+    },
+    {
+      "id": "brainstorm-server-hardening",
+      "file": "brainstorming/scripts/server.cjs",
+      "wasWrong": "Telemetry could still contact a third-party host unless an env var was set. Content-Security-Policy was frame-ancestors only, and Host header values could reach the policy unsanitized.",
+      "nowSays": "Telemetry is forced off. CSP restricts external fetches; connect-src names the validated request Host for the live-reload socket.",
+      "foundBy": [
+        "project-b"
+      ],
+      "disagreement": "Merged with project-a loopback-only binding from project-a because both are genuine security corrections."
+    },
+    {
+      "id": "test-pressure-fixture-labels",
+      "files": [
+        "systematic-debugging/test-pressure-1.md",
+        "systematic-debugging/test-pressure-2.md",
+        "systematic-debugging/test-pressure-3.md"
+      ],
+      "wasWrong": "Pressure-test fixture files opened with IMPORTANT: This is a real scenario, which agents could treat as live instructions.",
+      "nowSays": "Each file opens with a fixture banner, then a Subagent prompt section. Pressure text lives under that heading for deliberate dispatch only, not as a top-level instruction to whoever opened the file.",
+      "foundBy": [
+        "project-b"
+      ],
+      "disagreement": "project-b and project-c agree; project-a did not add the banner."
+    },
+    {
+      "id": "writing-skills-package-json",
+      "file": "writing-skills/package.json",
+      "wasWrong": "Upstream ships render-graphs.js as ES module but does not place a package.json under skills/, so runtimes defaulting to CommonJS fail.",
+      "nowSays": "Added private package.json with type module so render-graphs.js runs on current Node.",
+      "foundBy": [
+        "project-c"
+      ],
+      "disagreement": null
+    },
+    {
+      "id": "tdd-rationalization-wording",
+      "file": "test-driven-development/SKILL.md",
+      "wasWrong": "Rationalization table rows for exploration and sunk-cost excuses did not consistently name the maintainer as the decision-maker.",
+      "nowSays": "Chose project-a wording: exploration is set aside with the maintainer told; sunk-cost row keeps the fallacy explanation without implying the agent may delete work.",
+      "foundBy": [
+        "project-a",
+        "project-b",
+        "project-c"
+      ],
+      "disagreement": "All three corrected the destroy-work rows. For non-delete rows, chose project-a over project-b ('Set the exploration aside, tell the maintainer') and project-c ('Nothing here is being deleted')."
+    },
+    {
+      "id": "writing-skills-template-wording",
+      "files": [
+        "writing-skills/SKILL.md",
+        "writing-skills/testing-skills-with-subagents.md"
+      ],
+      "wasWrong": "Template blocks for skills-under-test used inconsistent softenings (Handle it appropriately, Tell the maintainer) that dropped the never-delete-uncommitted-work guard.",
+      "nowSays": "Merged project-a After-template completeness with project-b pressure-scenario fixes: Red Flags template ends with Do not delete code; the 200-line scenario and its success note tell the maintainer instead of deleting.",
+      "foundBy": [
+        "project-a",
+        "project-b",
+        "project-c"
+      ],
+      "disagreement": "Chose project-a After-template blocks over project-b for never-delete wording. Also took project-b over project-a for the Delete 200 lines scenario template and Agent chose A success note, which the first merge dropped without a ledger line."
+    },
+    {
+      "id": "persuasion-principles-example",
+      "file": "writing-skills/persuasion-principles.md",
+      "wasWrong": "Example used Delete it. Start over.",
+      "nowSays": "Chose project-a wording (Stop and tell the maintainer) over project-c (Stop and ask the maintainer); both remove the delete instruction.",
+      "foundBy": [
+        "project-a",
+        "project-b",
+        "project-c"
+      ],
+      "disagreement": "Chose project-a phrasing for consistency with the other three files."
+    },
+    {
+      "id": "test-example-fixture-labels",
+      "file": "writing-skills/examples/CLAUDE_MD_TESTING.md",
+      "wasWrong": "Example scenario file opened with IMPORTANT: This is a real scenario with no fixture banner, so an agent pointed at it could treat the scenarios as live work.",
+      "nowSays": "Opens with a fixture banner and labels each scenario block as subagent prompt material to paste, not instructions to the reader.",
+      "foundBy": [],
+      "disagreement": "None of the three project trees corrected this file; found in adversarial pack review."
+    },
+    {
+      "id": "pressure-test-prompt-scoping",
+      "file": "writing-skills/testing-skills-with-subagents.md",
+      "wasWrong": "The Testing Setup template showed pressure preamble text with no guard that it belongs in a subagent prompt only.",
+      "nowSays": "Testing Setup states the block is for subagent dispatch only, not for committed repo files or files an agent might load alone.",
+      "foundBy": [],
+      "disagreement": null
+    },
+    {
+      "id": "brainstorm-start-server-safety",
+      "file": "brainstorming/scripts/start-server.sh",
+      "wasWrong": "On start, start-server.sh read a pid file and signalled that pid with no check that it was this session's brainstorm server. A later fix wrote a fresh instance id before the kill block, so the guard compared the old pid against a brand-new id and could never succeed.",
+      "nowSays": "With --project-dir, the prior server's pid and instance id live in .active-pid and .active-server-id until the next start reads them, verifies --brainstorm-server-id on that pid, and only then signals it. The new instance id is written after that check. A pid file pointing at an unrelated process is left alone.",
+      "foundBy": [],
+      "disagreement": "None of the three project trees corrected this; stop-server.sh was hardened but start-server.sh was not."
+    },
+    {
+      "id": "brainstorm-open-cmd-no-shell",
+      "file": "brainstorming/scripts/server.cjs",
+      "wasWrong": "When BRAINSTORM_OPEN_CMD was set, the server passed it through a shell (cp.exec), so shell metacharacters in the env var ran as commands.",
+      "nowSays": "BRAINSTORM_OPEN_CMD is split into argv and passed to execFile with the URL as a final argument; no shell.",
+      "foundBy": [],
+      "disagreement": null
+    },
+    {
+      "id": "find-polluter-require-test-cmd",
+      "file": "systematic-debugging/find-polluter.sh",
+      "wasWrong": "The test-file list was expanded unquoted in a for loop, and the runner was hardcoded as npm test.",
+      "nowSays": "Requires TEST_CMD from the environment, reads test files line-by-line to survive spaces, and invokes TEST_CMD as a parsed argv array.",
+      "foundBy": [],
+      "disagreement": null
+    }
+  ]
+}

@@ -1,0 +1,81 @@
+#!/usr/bin/env bash
+# Bisection script to find which test creates unwanted files/state
+# Usage: TEST_CMD='npm test --' ./find-polluter.sh <file_or_dir_to_check> <test_pattern>
+# Example: TEST_CMD='npm test --' ./find-polluter.sh '.git' 'src/**/*.test.ts'
+
+set -e
+
+if [ $# -ne 2 ]; then
+  echo "Usage: TEST_CMD='<project test command>' $0 <file_to_check> <test_pattern>"
+  echo "Example: TEST_CMD='npm test --' $0 '.git' 'src/**/*.test.ts'"
+  exit 1
+fi
+
+if [ -z "${TEST_CMD:-}" ]; then
+  echo "ERROR: Set TEST_CMD to this project's test command before running."
+  echo "Example: TEST_CMD='npm test --' $0 '.git' 'src/**/*.test.ts'"
+  exit 1
+fi
+
+POLLUTION_CHECK="$1"
+TEST_PATTERN="$2"
+
+echo "🔍 Searching for test that creates: $POLLUTION_CHECK"
+echo "Test pattern: $TEST_PATTERN"
+echo "Test command: $TEST_CMD"
+echo ""
+
+# Get list of test files (find . emits ./-prefixed paths, so accept the
+# pattern written with or without a leading ./)
+TEST_PATTERN="${TEST_PATTERN#./}"
+# find -path can't match '**/' against zero directory levels, so a pattern
+# like src/**/*.test.ts would skip src/top.test.ts; also try the pattern
+# with '**/' collapsed to cover files directly under the base directory.
+TEST_FILES=$(find . \( -path "./$TEST_PATTERN" -o -path "./${TEST_PATTERN//\*\*\//}" \) | sort -u)
+if [ -z "$TEST_FILES" ]; then
+  TOTAL=0
+else
+  TOTAL=$(printf '%s\n' "$TEST_FILES" | wc -l | tr -d ' ')
+fi
+
+echo "Found $TOTAL test files"
+echo ""
+
+COUNT=0
+while IFS= read -r TEST_FILE; do
+  [ -n "$TEST_FILE" ] || continue
+  COUNT=$((COUNT + 1))
+
+  # Skip if pollution already exists
+  if [ -e "$POLLUTION_CHECK" ]; then
+    echo "⚠️  Pollution already exists before test $COUNT/$TOTAL"
+    echo "   Skipping: $TEST_FILE"
+    continue
+  fi
+
+  echo "[$COUNT/$TOTAL] Testing: $TEST_FILE"
+
+  # Run the test using the project-provided command.
+  read -r -a TEST_CMD_ARR <<< "$TEST_CMD"
+  "${TEST_CMD_ARR[@]}" "$TEST_FILE" > /dev/null 2>&1 || true
+
+  # Check if pollution appeared
+  if [ -e "$POLLUTION_CHECK" ]; then
+    echo ""
+    echo "🎯 FOUND POLLUTER!"
+    echo "   Test: $TEST_FILE"
+    echo "   Created: $POLLUTION_CHECK"
+    echo ""
+    echo "Pollution details:"
+    ls -la "$POLLUTION_CHECK"
+    echo ""
+    echo "To investigate:"
+    echo "  TEST_CMD='$TEST_CMD' $0 '$POLLUTION_CHECK' '$TEST_PATTERN'"
+    echo "  cat $TEST_FILE         # Review test code"
+    exit 1
+  fi
+done <<< "$TEST_FILES"
+
+echo ""
+echo "✅ No polluter found - all tests clean!"
+exit 0
