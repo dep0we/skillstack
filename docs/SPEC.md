@@ -454,12 +454,28 @@ history on 2026-08-19 orphaned every commit sha existing clones held, and an
 unauthenticated fetch of one of those shas returns HTTP 404, the same status
 an unreachable repository returns.
 
-**REQUIRED, and not yet in place: a tag protection rule on this repository.**
-A tag is only immutable if the host enforces it. The rule must forbid both
-rewriting and deleting any tag matching `*-v*`. Creating it is a repository
-setting and therefore the maintainer's call. As of this writing this
-repository has **no tags and no rulesets**, so until that changes every
-project resolves `release not found` and nothing is excluded anywhere.
+**The tag protection rule, and exactly how far it goes.** A tag is only
+immutable if the host enforces it. This repository carries a repository
+ruleset, "release tags are immutable", created 2026-08-23 on the maintainer's
+authorisation, targeting tags matching `refs/tags/*-v*` and forbidding
+deletion, non-fast-forward and update, with an empty bypass list.
+
+**It stops every change that arrives through git, and it does not stop an
+administrator who turns it off first.** Measured, not assumed: a probe tag was
+created, and attempts to move and delete it were refused with
+`Cannot update this protected ref` and `Cannot delete this tag`; the probe was
+then removed by setting the ruleset's enforcement to disabled, deleting it,
+and setting enforcement back to active. So `bypass_actors: []` and
+`current_user_can_bypass: never` are both true and both describe the git path
+only.
+
+This is written down rather than left as folklore because "immutable" without
+it reads as stronger than it is, and somebody will eventually build on the
+stronger reading. What it means in practice: a mistaken release tag can only
+be withdrawn by deliberately switching the protection off, which is an act
+visible to everyone and one that trains people to treat the rule as advisory.
+So a release tag is cut once, after its content is merged and verified, and
+never speculatively.
 
 **The published hash map.** At each release tag this repository carries
 `packs/<pack>/files.json`:
@@ -475,6 +491,14 @@ project resolves `release not found` and nothing is excluded anywhere.
   }
 }
 ```
+
+**Provenance note on the commits this map names.** This repository's history
+begins at a single root commit because it was rebuilt on 2026-08-19 to strip
+private paths and names before being published. Every sha predating that
+rebuild is unresolvable, which is the defect that made the pack version rather
+than a commit the lookup key. A `packCommit` recorded here is therefore always
+post-rebuild, and a reader who finds history starting abruptly is looking at
+that event and not at a truncated clone.
 
 **Keys are pack-relative, not project-relative.** This keeps the published
 list independent of how many directories a project lays skills into: a project
