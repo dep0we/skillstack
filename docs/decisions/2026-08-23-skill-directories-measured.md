@@ -155,7 +155,12 @@ where the manifest names many files, which breaks the gate that reads a diff.
 
 Everything above is reproducible from the method as written: four repositories,
 one skill location each, an empty control, an unguessable token in the
-description, and the tool-call ordering read rather than the answer. Raw logs
-from this run were kept, outside this repository, because they carry absolute
-filesystem paths that do not belong in a public repository. They are not needed
-to re-run it.
+description, and the tool-call ordering read rather than the answer.
+
+The raw transcripts and the scripts that produced them were kept, and are
+recorded in the maintainer's notes rather than here. They are absolute
+filesystem paths from end to end, which do not belong in a public repository,
+and the path to them is machine-specific detail that would not help a reader
+anyway. Nothing in them is needed to re-run this: the method above is. They
+exist for anyone who would rather check the original than take the table on
+trust.
