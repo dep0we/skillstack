@@ -9,6 +9,35 @@ text under it.
 
 ## [Unreleased]
 
+- Section 4 of `docs/SPEC.md` rewritten as a settled contract rather than a
+  proposal, implementing the maintainer's 2026-08-20 ruling that the merge
+  gate asks this repository for shipped hashes instead of trusting the copy in
+  the project under review. Schema moves to version 4: `shippedSha256` is
+  removed rather than renamed, leaving one hash per file that belongs to the
+  layering tool and that no gate reads. Exclusion scope now comes from the
+  target branch's manifest, never the pull request's, because a change can
+  leave the version fields untouched and add paths to the `files` array.
+  Shipped hashes resolve through an immutable annotated tag named
+  `<pack>-v<packVersion>`, derived from pack name and version and never read
+  from the manifest, against a new published `packs/<pack>/files.json` whose
+  keys are pack-relative so the layout a project chooses cannot invalidate a
+  release. `packCommit` is audit-only: this repository's history was rebuilt
+  into a single root commit on 2026-08-19, so a recorded sha is not a durable
+  reference. Adds git-blob hashing with symlink and gitlink rejection, merge
+  and force-push handling, and five outcomes that must each print differently
+  (`not applicable`, `lookup failed`, `release not found`, `in scope`,
+  `excluded`). Narrows allowed locations to `.claude/skills/` and
+  `.agents/skills/`, dropping `.cursor/skills/`, flagged as resting on a
+  carried-forward measurement that DAR-157 will re-run. Fixes the manifest
+  example, which keyed a pack by a skill name (`test-driven-development`)
+  instead of the pack name (`superpowers`), teaching the wrong lookup key for
+  the field a gate resolves a release by. Records the ruling and its
+  consequences in `docs/decisions/2026-08-20-gate-asks-skillstack-for-shipped-hashes.md`.
+- Section 7's first open question is now closed by that ruling and replaced by
+  the one thing still outstanding: this repository has no tags and no tag
+  protection rule, and a tag is only immutable if the host enforces it.
+  Creating that rule is a repository setting and therefore the maintainer's.
+
 - Last spec review round: stated plainly what a `shippedSha256` match does and
   does not prove (bytes match a number in the manifest, not proof the pack
   shipped them), that `shippedSha256`, `files`, and `"skills"` are all

@@ -1,9 +1,11 @@
 # skillstack: spec
 
-**Status:** spec and scaffold only (Linear DAR-155). Nothing in this document
-is built yet except the two carried-forward scripts under `bin/`, copied in
-unmodified. The bundle, the corrections, and the new tool are separate,
-tracked work.
+**Status:** the corrected pack is built and merged. Section 4 is a settled
+contract between this repository and the guardrail toolkit that reads the
+manifest; everything it describes on the reading side is specified and not yet
+built on either side. The layering tool itself does not exist yet: `bin/` still
+holds only the two carried-forward scripts, copied in unmodified, both of which
+section 6 marks superseded.
 
 ## 1. The problem this solves
 
@@ -116,9 +118,10 @@ Conceptually, replacing `bin/vendor-skills.sh` with something that:
    guard script in one existing project proves a gate has to survive: a hash
    alone is defeated by a same-change re-pin — a change that edits a corrected
    file, recomputes its hash, and updates whatever recorded the old one passes
-   every on-disk hash check trivially and needs a second hash that does not
-   move with the file. Kit's own install manifest stores two per-file hashes
-   for exactly this reason; section 4 adopts that vocabulary. Additional
+   every on-disk hash check trivially. A second hash stored beside the first
+   does not fix it, because the same change can write both; section 4 answers
+   it instead by taking the shipped hashes from outside the repository under
+   review entirely. Additional
    signals (required wording present a minimum number of times, a floor on
    how many files are corrected, a scan for the forbidden phrasing the
    correction removed) remain design work for the pack-cutting step, not for
@@ -151,54 +154,58 @@ way to know which files in a diff are pack content the maintainer already
 reviewed once, here, versus project-specific work that needs the same
 scrutiny as everything else.
 
-**This shape has not been agreed with the kit-side work and must be treated
-as a proposal, not a contract, until that happens.** Kit's own
-`docs/BUILD-SPEC.md` (read in full for this work) defines `.kit/manifest.json`
-for kit's own installed files and states integrity rules for a
-maintainer-trusted manifest, but it does not yet mention this file at all —
-there is currently no exclusion-from-review-scope mechanism in kit for
-vendored skill content. That gap is real and is called out again in the
-report for this task.
+**This shape is now agreed with the kit-side work.** The maintainer ruled on
+2026-08-20 that the gate does not trust the hash list inside the project under
+review; it asks `skillstack` for the hashes that pack version actually
+shipped. Schema 3, described in earlier revisions of this document, proposed
+the opposite and is withdrawn. What follows is a contract, not a proposal.
 
-### Proposed shape
+### The trust model, which the rest of this section only implements
+
+Three rules. Every mechanism below exists to serve one of them, and a reader
+that keeps them straight can re-derive the rest.
+
+1. **Anything the change under review can write is evidence, never
+   authority.** Every field in `.vendored-skills.json` lives in the project
+   repository, so the same change that edits a skill file can edit any field
+   that would have vouched for it. This is not a flaw in a particular field.
+   It is true of the file, and of any file a pull request can reach.
+2. **Exclusion scope comes from the target branch.** What may be excluded is
+   decided by the manifest already merged into the branch being merged into.
+   The proposed manifest is compared against that baseline and is never read
+   as the source of scope or identity.
+3. **Shipped hashes come from `skillstack`, at an immutable release tag.** A
+   pull request can edit its own manifest. It cannot edit what this repository
+   published.
+
+This design has now been defeated three times, each time in the same way: a
+field that a reviewer had not thought of turned out to be writable by the
+change being reviewed, and it was read as authority. First the per-file hash.
+Then `shippedSha256` beside it. Then the `files` array itself, still read as
+authority after the version fields around it had been checked. Rule 1 is the
+general form. Apply it to every new field before adding one.
+
+### The manifest (`schemaVersion: 4`)
 
 Filename: `.vendored-skills.json` at the project root — the name
 `vendor-skills.sh` already writes and that a vendored-skill guard script in
 one existing project and the maintainer's own decision record already
 reference. Continuity over a fresh name, since three things outside this
-repository already look for it by that name. The schema below is a breaking
-change to what that file holds today, which is why it carries an explicit
-version.
+repository already look for it by that name.
 
-Each file entry carries **two hashes**, modeled on kit's install manifest:
-`shippedSha256` records what this pack version shipped and is written once at
-lay-down; `sha256` records what the tool last expected on disk and is what
-`--forget` may update. A merge gate must use `shippedSha256` alone to decide
-exclusion. Matching `sha256` without matching `shippedSha256` means the
-maintainer kept a local edit, including after `--forget` re-recorded the
-on-disk hash.
-
-**What a `shippedSha256` match does and does not prove.** A field in this
-file is a declaration a pull request can write, the same as any other field in
-a committed JSON file; nothing about the shape of a JSON field makes it
-unforgeable. A match means the bytes on disk match a number recorded in this
-file. It does not mean this pack shipped those bytes. `shippedSha256`, the
-`files` list, and the `"skills"` list all live in the project repository, so
-the same change that edits a skill file can edit all three to agree with it.
-A reader that only has this file and the working tree has no copy of what
-skillstack published and cannot check them. What the second hash field actually
-stops is `--forget` and a re-pin that updates `sha256` only. Catching a
-hostile rewrite needs either a copy of the shipped hashes this pull request
-cannot edit, or a human treating the manifest diff as the real review of the
-files this mechanism would exclude. That a changed hash in this JSON file
-appears in the pull request diff is not a hostile read of the skill file
-itself; this shape just took that file out of review scope.
+**One hash per file, named `sha256`, and it belongs to the tool, not to the
+gate.** It records what the layering tool last wrote or last accepted on disk.
+It is what makes hand-edit detection and `--forget` work with no network. The
+gate never reads it. Schema 3's second field, `shippedSha256`, is **removed**
+rather than renamed: it was not authoritative, its name asserted that it was,
+and two authoritative-looking fields where only one is authoritative is how
+the previous design was defeated.
 
 ```json
 {
-  "schemaVersion": 3,
+  "schemaVersion": 4,
   "packs": {
-    "test-driven-development": {
+    "superpowers": {
       "source": "skillstack",
       "packVersion": "0.1.0",
       "packCommit": "<sha of the skillstack commit this pack version was cut from>",
@@ -212,17 +219,10 @@ itself; this shape just took that file out of review scope.
       "files": [
         {
           "path": ".claude/skills/test-driven-development/SKILL.md",
-          "shippedSha256": "<sha256 of pack content at lay-down>",
-          "sha256": "<sha256 the tool last recorded for on-disk content>"
-        },
-        {
-          "path": ".cursor/skills/test-driven-development/SKILL.md",
-          "shippedSha256": "<sha256 of pack content at lay-down>",
           "sha256": "<sha256 the tool last recorded for on-disk content>"
         },
         {
           "path": ".agents/skills/test-driven-development/SKILL.md",
-          "shippedSha256": "<sha256 of pack content at lay-down>",
           "sha256": "<sha256 the tool last recorded for on-disk content>"
         }
       ]
@@ -231,21 +231,29 @@ itself; this shape just took that file out of review scope.
 }
 ```
 
-At lay-down, `shippedSha256` and `sha256` are equal. After a hand edit,
-on-disk content no longer matches either hash and the tool refuses to
-overwrite. After `--forget`, the tool updates `sha256` to the current on-disk
-content but leaves `shippedSha256` unchanged, so the file still does not
-match what the pack shipped.
+**The key under `"packs"` is the pack name, not a skill name.** In the example
+above that is `superpowers`, matching `packs/superpowers/pack.json`, while
+`test-driven-development` is one of the skills that pack contains. Earlier
+revisions of this document used a skill name as the key, which taught the
+wrong lookup key for the field the gate resolves a release by.
 
-A project that has taken more than one pack carries one entry per pack name
-under `"packs"`. `schemaVersion: 1` (undocumented, implicit) is the shape
-`vendor-skills.sh` writes today, keyed by repository URL under `"vendored"`
-rather than by pack name under `"packs"`, with a single hash per path and no
-`shippedSha256`, `packVersion`, or `packCommit` field at all because today
-there is no pack, only a direct upstream vendor. `schemaVersion: 2` was an
-earlier proposal in this document with the same single-hash-per-path defect;
-readers must treat it as withdrawn. A reader must treat a manifest with no
-`schemaVersion` field as schema 1 and must not apply the rules below to it.
+**There is no `packTag` field, deliberately.** The release tag is derived from
+the pack name and pack version (see below), never read from the manifest. A
+tag name the project supplies is one more thing the change under review can
+write, which rule 1 forbids.
+
+`packCommit` is **audit-only**. It answers "which commit was this cut from"
+for a human reading history. Nothing resolves it, nothing verifies against it,
+and forging it gains nothing. The commit a gate reports as authoritative is
+the one it resolved from the release tag, not this field.
+
+`schemaVersion` history: **1** is the undocumented shape `vendor-skills.sh`
+writes today, keyed by repository URL under `"vendored"`, one hash per path,
+no pack concept. **2** and **3** were proposals in earlier revisions of this
+document and are withdrawn; 3 in particular carried `shippedSha256` and told
+gates to exclude on it, which is now known to be unsound. A reader must treat
+a manifest with no `schemaVersion` as schema 1, and must not apply the rules
+below to any version it does not recognise.
 
 ### Path normalization
 
@@ -269,8 +277,7 @@ whether a working-tree file is listed.
 A path in `files` is pack content only if **all** of the following hold after
 normalization:
 
-1. It starts with exactly one of `.claude/skills/`, `.cursor/skills/`, or
-   `.agents/skills/`.
+1. It starts with exactly one of `.claude/skills/` or `.agents/skills/`.
 2. The first path segment after that prefix (the skill directory name) appears
    in that pack's `"skills"` array. For
    `.claude/skills/test-driven-development/SKILL.md` that segment is
@@ -278,100 +285,184 @@ normalization:
    (`SKILL.md`).
 3. It names a file, not a directory (no trailing `/` after normalization).
 
+**`.cursor/skills/` is not an allowed location in schema 4.** The reason is
+that Cursor and Codex both read `.agents/skills/`, which makes a third copy
+redundant. That rests on a loader-trace measurement taken on 2026-08-17 and
+2026-08-18, carried here from a prior session's record rather than re-run for
+this document. It is the load-bearing fact for the narrowing, so it is being
+re-measured under DAR-157 and the transcripts will be recorded with that
+decision. **If the re-measurement contradicts it, this rule is what changes.**
+A schema 4 manifest naming a `.cursor/` path was not written by this tool and
+the reader rejects it. Schema 1 manifests predate all of this and are governed
+by their own (absent) rules, not by these.
+
 Anything else — including project source, configuration, or a skill directory
 not named in `"skills"` — is not pack content for this mechanism even if
 someone added a matching hash. A reader that finds a disallowed path must
 reject the whole manifest and exclude nothing.
 
-### What a reader must be able to determine from this file alone
+### Resolving shipped hashes from `skillstack`
 
-No network access, no clone of `skillstack` or of upstream, no state other
-than this file and the working tree it describes:
+**The release tag.** Cutting a pack version creates an annotated tag named
+`<pack>-v<packVersion>`, so pack `superpowers` at version `0.1.0` is
+`refs/tags/superpowers-v0.1.0`. A reader derives that name from the pack name
+and version in the manifest and resolves that exact ref. It does not accept a
+tag name from the manifest, does not fall back to a branch, and does not fall
+back to `packCommit`.
 
-1. **The complete set of file paths that belong to a named pack**, after
-   normalization and allowed-location filtering. This is the only candidate
-   list for exclusion from review scope — nothing outside this list is ever
-   excluded by this mechanism, no matter what directory it sits in.
-2. **Whether a listed file's on-disk bytes match `shippedSha256`.** Hash the
-   file as it exists in the working tree and compare to `shippedSha256`, not
-   to `sha256`. See the limit stated above: a match proves agreement with a
-   number in this file, not that skillstack shipped those bytes. A gate may
-   treat a match as grounds to exclude only after the open question below is
-   settled with the guardrail toolkit.
-   - On-disk hash matches `shippedSha256` → bytes match the number in this
-     file. Not proof the pack shipped them; not safe to exclude on that
-     strength alone until trustworthy shipped hashes have a settled source.
-   - On-disk hash differs from `shippedSha256` → the file is not unmodified
-     pack content, even if it matches `sha256`. **This must never be
-     excluded.** This covers hand edits, `--forget` re-records, and any
-     same-change re-pin that updated `sha256` without restoring the shipped
-     bytes. A file in that state needs the same scrutiny as any other change
-     in the diff, not less.
-   - A file the manifest names that no longer exists on disk is neither
-     excluded nor silently ignored; a reader should treat it as it would any
-     other deleted tracked file and say so.
-3. **Which pack, at which version and commit, produced the file**, for audit
-   trail — "why was this excluded" must answer with a name, a version, and a
-   commit, not just "a manifest said so."
-4. **Which upstream repository, subdirectory, and commit the pack itself was
-   cut from**, for provenance beyond `skillstack` — this is what lets someone
-   eventually go compare a pack's corrections against a specific upstream
-   snapshot.
+**Tags are cut on the merged commit, after merge, never before.** This
+repository publishes by squash merge, and a squash merge creates a commit that
+does not exist until the merge happens. A tag cut on a pre-merge commit names
+an object that the merge orphans. This is not hypothetical: rebuilding this
+repository's history on 2026-08-19 orphaned every commit sha that existing
+clones held, and an unauthenticated fetch of one of those shas returns HTTP
+404 — the same status an unreachable repository returns.
 
-The `sha256` field exists so the layering tool can keep working: detect hand
-edits, refuse to overwrite them, and let `--forget` re-record on-disk content
-without losing what the pack originally shipped. A merge gate must not treat
-a `sha256` match as grounds for exclusion.
+**REQUIRED, and not yet in place: a tag protection rule on this repository.**
+A tag is only immutable if the host enforces it. The rule must forbid both
+rewriting and deleting any tag matching `*-v*`. Without it, "immutable release
+tag" is a description of intent rather than a property, and the whole
+mechanism rests on it. Creating the rule is a repository setting and therefore
+the maintainer's call, not something this document or the tool can do. As of
+this writing this repository has **no tags and no rulesets**, so the mechanism
+has nothing to resolve yet; see "release not found" below, which is the state
+every project is in until the first tag exists.
+
+**The published hash map.** At each release tag, this repository carries
+`packs/<pack>/files.json`:
+
+```json
+{
+  "schemaVersion": 1,
+  "pack": "superpowers",
+  "packVersion": "0.1.0",
+  "packCommit": "<sha>",
+  "files": {
+    "test-driven-development/SKILL.md": "<sha256>"
+  }
+}
+```
+
+**Keys are pack-relative, not project-relative.** This is what keeps the
+published list independent of how many directories a project lays skills into:
+a project that took two directories and one that took three check against the
+same map, and changing the layout cannot invalidate a published pack. A reader
+maps a project path to a pack-relative key by stripping the
+`.claude/skills/` or `.agents/skills/` prefix. One fetch per pack, not one per
+file.
+
+Release-time validation, which is the pack-cutting step's obligation and not
+the gate's: `files.json` must be the complete and exact hash map of everything
+under `packs/<pack>/skills`, and its `packVersion` must match the tag it is
+published under. A file omitted from the map is not excluded by any gate, so
+an omission fails safe, but it still means the map is wrong.
+
+**What a hash in this map does and does not prove.** It proves the bytes on
+disk are the bytes this repository published at that release. It does not
+prove the pack was correctly reviewed, that its corrections are complete, that
+it is licence-compliant, that it was really derived from the upstream commit
+it names, or that this repository was not itself compromised. Fetching and
+hashing each remote file rather than trusting the map adds nothing against
+those, because the bytes and the map come from the same authority.
+
+### What the gate determines, and in what order
+
+1. **Read the baseline manifest** — `.vendored-skills.json` as it exists on
+   the actual target commit being merged into, not on the pull request's merge
+   base and not on the working tree. For a merge from another branch these
+   differ, and the target commit is the one whose contents a merge actually
+   accepts. This baseline is the sole source of exclusion scope and pack
+   identity.
+2. **Read the proposed manifest** and compare. If the pack set, `packVersion`,
+   `skills` array, or `files` array differ in any way for a pack, **exclude
+   nothing for that pack** and say so. A legitimate pack upgrade therefore
+   gets exactly one full review, which is the correct price: an upgrade
+   changes the content being trusted.
+3. **Resolve the release** for each baseline pack, by derived tag, and fetch
+   its `files.json`.
+4. **Hash and compare.** For each path in the baseline pack's `files`, hash
+   the content and compare to the published map.
+
+**Hash the git blob, not the checked-out file.** Read the object git records
+for that path at the commit under review. A working-tree read can be diverted
+by a symlink, by a filter or a line-ending conversion, or by a file the
+checkout never produced faithfully. Reject any path whose git object is not a
+regular file blob: a symlink, a gitlink, or a submodule entry at a path the
+manifest names is an anomaly, not pack content, and it is never excluded.
+
+Excluded only when: the pack identity is unchanged from the baseline, the
+release resolved, and the blob hash equals the published hash. Everything
+else is in scope.
+
+### The outcomes, which must never print the same result
+
+A check that could not run and a check that found nothing wrong are the same
+clean line unless the tool takes care to make them different. Five outcomes,
+five distinct messages:
+
+- **`not applicable`** — the project has no `.vendored-skills.json`, or it has
+  no packs. Nothing to exclude and nothing wrong. This must not read as a
+  failure.
+- **`lookup failed`** — `skillstack` could not be reached at all. Refuse to
+  exclude anything, loudly, and name the cause. An anonymous caller cannot
+  distinguish a private repository from one that does not exist, and does not
+  need to: both mean the source is unreachable.
+- **`release not found`** — `skillstack` was reachable and the derived tag does
+  not exist there. Refuse to exclude anything for that pack, loudly. This is a
+  different operator problem from `lookup failed` — a missing release versus a
+  missing source — and it is the state every project is in until the first tag
+  is cut, so it is the first case to test.
+- **`in scope`** — a listed file's hash does not match the published map, or
+  the pack identity changed in this pull request, or the manifest failed an
+  integrity rule. Reviewed normally, with the reason stated.
+- **`excluded`** — say how many files, for which pack, at which version, and
+  which release commit the hashes came from. "Why was this excluded" must
+  answer with a name, a version and a resolved commit, never with "a manifest
+  said so."
+
+A force-pushed pull request is re-evaluated against its new commit. A prior
+result is never reused, because the commit it described no longer exists.
 
 ### Integrity rules a reader must apply before trusting the file at all
 
-Modeled directly on the rules kit's own `BUILD-SPEC.md` already states for
-`.kit/manifest.json`, because the failure mode is identical: a manifest a
-reader trusts blindly is a manifest an editor can make say anything.
+Modeled on the rules kit's own `BUILD-SPEC.md` states for `.kit/manifest.json`,
+because the failure mode is identical: a manifest a reader trusts blindly is a
+manifest an editor can make say anything.
 
 - **Invalid JSON: reject the whole file, exclude nothing.** Do not guess at a
   partial read.
 - **A path is absolute, contains a `..` segment, or fails normalization:
-  reject the whole file, exclude nothing.** A manifest is meant to describe
-  only this project's own working tree; one that names a path outside it is
-  not describing the tool's own writes and cannot be trusted for any purpose,
-  the same reasoning kit's own manifest rule uses for `../`.
+  reject the whole file, exclude nothing.**
 - **The same normalized path appears under more than one pack, or twice in
   one pack's `files` array: reject the whole file, exclude nothing.**
-  Ownership of a path by two packs at once cannot be resolved by a reader
-  that only sees this file; it needs a human decision, not a guess.
+  Ownership of a path by two packs at once needs a human decision, not a guess.
 - **A path fails the allowed-location rules above: reject the whole file,
   exclude nothing.**
-- **A file entry is missing `shippedSha256` or `sha256`: reject the whole
-  file, exclude nothing.** Both hashes must be present for every entry; a
-  reader cannot infer shipped content from `sha256` alone.
-- **An unrecognized `schemaVersion`: treat as untrusted for this mechanism.**
-  A future schema 4 reader encountering schema 3 should refuse to apply
-  schema-3-specific rules to it rather than partially interpreting a shape it
-  was not built for.
+- **A file entry is missing `path` or `sha256`, or carries a `shippedSha256`
+  field: reject the whole file, exclude nothing.** The removed field is
+  rejected rather than ignored, so a schema 3 manifest mislabeled as schema 4
+  fails loudly instead of being read under rules it was not written for.
+- **An unrecognized `schemaVersion`: treat as untrusted for this mechanism**
+  rather than partially interpreting a shape the reader was not built for.
 
-A manifest that fails any of these rules means the reader falls back to
-reviewing every file normally — the same posture as if the manifest did not
-exist at all. Failing closed here is the same posture kit already takes with
-its own manifest.
+A manifest that fails any of these means the reader reviews every file
+normally — the same posture as if the manifest did not exist. Failing closed
+here is the posture kit already takes with its own manifest.
 
 ### What this shape does not attempt to solve here
 
-- **Where kit's gate reads this from**, whether it needs its own copy of the
-  hashing logic or can shell out to something `skillstack` ships, and how a
-  project with no `skillstack`-managed packs at all is told apart from one
-  whose manifest failed integrity — all kit-side design work, out of scope
-  for this repository.
+- **How kit implements any of this** — where the gate caches a fetch, whether
+  it carries its own hashing logic or shells out to something this repository
+  ships, and how it words each of the five outcomes. Kit-side design work,
+  out of scope for this repository.
 - **Whether `schemaVersion: 1` files need a migration path** written by this
-  tool, versus simply being left alone until the project re-runs vendoring
-  and gets upgraded. Not decided here.
-- **OPEN QUESTION — source of trustworthy shipped hashes.** This document
-  proposes comparing on-disk bytes to `shippedSha256` in
-  `.vendored-skills.json`, but that field, the `files` list, and the
-  `"skills"` list are all writable by the pull request under review. Where
-  shipped hashes come from that a gate can trust is unsettled. It must be
-  settled with the guardrail toolkit before any gate excludes files on the
-  strength of this manifest. This document does not pick a mechanism.
+  tool, versus being left alone until the project re-runs the tool and gets
+  upgraded. Not decided here.
+- **A compromised `skillstack`, or a direct push to a project's target
+  branch.** Both defeat this design, and both defeat every alternative
+  considered, because each removes the authority the gate is resting on rather
+  than tricking it. They are answered by protecting the release-writing path
+  and the target branch, not by anything in this file.
 
 ## 5. Does skillstack install kit into itself?
 
@@ -403,9 +494,9 @@ itself directories of skill-shaped files (the packs it stores and ships).
 Kit's own secrets/opdata scanners and jargon check would need to tell
 "skillstack's own tooling" apart from "the third-party skill content
 skillstack exists to store" — precisely the exclusion-from-scope problem
-section 4 raises and has not yet been solved on the kit side. Installing kit
-here now would hit that unsolved problem immediately, for no benefit this
-repository currently needs.
+section 4 now specifies and kit has not yet built. Installing kit here now
+would hit that gap immediately, for no benefit this repository currently
+needs.
 
 This is a **reversible** call, not a permanent one: if `skillstack` grows into
 multi-agent, multi-round build work, or if kit's exclusion-scope mechanism
@@ -431,8 +522,8 @@ should keep them rather than reinvent them:
 - `--forget` as the one deliberate way past that refusal, which never
   deletes anything and re-records the current on-disk hash so a future run
   can tell the difference between "still hand-edited" and "the maintainer
-  chose to give this one up". In schema 3 the new tool must re-record only
-  `sha256`, never `shippedSha256`;
+  chose to give this one up". Schema 4 has one hash per file, so `--forget`
+  re-records `sha256` and there is no second field for it to disturb;
 - treating orphaned files (upstream stopped shipping something this script
   once wrote) as reported, not deleted.
 
@@ -469,16 +560,22 @@ lists, for the same reason.
 
 ## 7. Open questions for the maintainer
 
-1. **The manifest shape in section 4 needs to be agreed with the kit-side
-   work before it is final.** Kit's `BUILD-SPEC.md` currently has no
-   exclusion-from-review-scope mechanism at all; this document proposes one
-   from the `skillstack` side only. Whoever does that kit-side design work
-   needs to accept, reject, or revise this shape — in particular the field
-   names, the reject-and-fall-back-closed integrity rules in section 4, and
-   whether kit wants its own copy of the hashing logic or to shell out to
-   something this repository ships. That work must also settle the open
-   question in section 4 about where trustworthy shipped hashes come from;
-   no gate should exclude on `shippedSha256` alone until it is.
+1. **REQUIRED: a tag protection rule on this repository.** Section 4 rests
+   the whole gate on release tags being immutable, and a tag is only immutable
+   if the host enforces it. The rule must forbid rewriting and deleting any
+   tag matching `*-v*`. This repository currently has no tags and no rulesets.
+   Creating the rule is a repository setting, so it is the maintainer's call,
+   not something this document or the tool can do. Until it exists, and until
+   the first tag is cut, every project resolves `release not found` and
+   nothing is excluded anywhere. That is the correct failure, but it is a
+   failure, and it is the state today.
+
+   The manifest shape itself is **settled** and no longer an open question.
+   The maintainer ruled on 2026-08-20 that the gate asks `skillstack` for the
+   shipped hashes rather than trusting the copy in the repository under
+   review, and that a human reading the manifest diff is explicitly not the
+   control. Section 4 is written as a contract on that basis.
+
 2. **Whether `.vendored-skills.json`'s filename should change** now that its
    schema is a breaking change from what it holds today (repository-keyed,
    no pack concept) to what section 4 proposes (pack-keyed, with pack version
