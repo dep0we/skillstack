@@ -9,6 +9,24 @@ text under it.
 
 ## [Unreleased]
 
+- Publishes `packs/superpowers/files.json`, the hash map a merge gate resolves
+  a release against: schema 1, 52 entries covering every tracked file under
+  `packs/superpowers/skills`, keys pack-relative, hashes SHA-256 over the
+  content git records at `8151d9b`. Generated from git objects rather than the
+  working tree, so it matches what a gate computes, and cross-checked against
+  `shasum` as an independent tool with a deliberately tampered entry as the
+  control. `packCommit` is `83f2e44`, the commit the corrected pack content was
+  cut at, verified as an ancestor of `main` with an empty `packs/` diff since.
+- Records the tag protection rule that now exists, and **states its limit**: it
+  refuses every change arriving through git, including from an administrator
+  using git, and it does not stop an administrator disabling the ruleset first.
+  Measured with a probe tag rather than assumed. An earlier reading of
+  `bypass_actors: []` as absolute was wrong, and "immutable" without the
+  qualifier reads stronger than it is.
+- Adds a provenance note explaining why this repository's history starts at a
+  single root commit, so a later reader does not mistake the 2026-08-19 rebuild
+  for a truncated clone.
+
 - Third review round on the section 4 contract, and it converged. No fifth
   defeat, none of the four returned, and closing the previous fourteen
   introduced nothing. **One finding, ruled non-blocking, now closed.** A
