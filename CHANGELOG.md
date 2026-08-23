@@ -9,6 +9,39 @@ text under it.
 
 ## [Unreleased]
 
+- Second review round on the section 4 contract: fourteen findings, none of
+  them a live defeat. **The inventory claimed to be exhaustive and was not**,
+  missing seven inputs including the published map's own fetch path, the
+  location prefixes, the normalization steps and the reachability request.
+  None was writable-then-trusted, so nothing was exploitable, but a false
+  completeness claim is what let each of the four earlier defeats arrive, so
+  the list is completed and the claim is now stated as something to maintain.
+  **"Baseline manifest content" was classed authority as a whole file** while
+  four of its own fields were classed evidence, so a builder reading the table
+  top-down would trust `source` and take a fetch target from a field an
+  earlier merged change wrote. The rows are split: only the identity fields
+  are authority, and provenance fields are evidence in the baseline too. Pins
+  the publishing repository by naming host, owner and repository as literals,
+  because a contract that cannot be implemented identically twice is not doing
+  its job. Names the reachability request exactly rather than describing it.
+  Fixes the filename, which the table pinned as a constant while section 7
+  still listed it as open, the permissive reading being the same defeat
+  applied to the manifest path. Settles validate-before-identity ordering,
+  which the numbered steps and the integrity heading contradicted. Makes a
+  naming-grammar failure reject the whole manifest, matching every other
+  integrity rule, where one passage had said exclude-nothing-for-that-pack.
+  Defines what "differs" means, as sets with list order irrelevant and the
+  tool's own `sha256` excluded, and says why excluding it is safe. Adds
+  outcomes for an unreadable proposed manifest and for a schema 4 baseline
+  whose `packs` key is missing rather than empty, the second reading of which
+  would have excluded on a malformed file. Gives `files.json` its own
+  `schemaVersion` line, since a gate applying the manifest's rule to it would
+  refuse every release forever. States that the gate accepts an annotated or
+  lightweight tag and must peel. Drops the one-cause-per-outcome claim, which
+  the document contradicted four lines later, and replaces it with the
+  property actually required: no two conditions ever print the same line, and
+  every outcome names its condition.
+
 - Cross-family review round on the section 4 contract: sixteen findings, of
   which two would each have made the mechanism useless. **The publishing
   repository was never named** anywhere in the document, so a builder needed a

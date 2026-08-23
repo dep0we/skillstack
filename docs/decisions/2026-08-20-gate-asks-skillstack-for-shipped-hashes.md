@@ -17,17 +17,21 @@ Two constraints came with the ruling, both load-bearing:
 1. **When the gate cannot reach `skillstack`, it must refuse to exclude
    anything, loudly, and say why.** A lookup that failed and a lookup that
    found no differences must never produce the same outcome.
-2. **The pack version and pack identity would themselves be read from the
-   project's manifest**, so a change could point at a different pack version
-   whose hashes suit it. Whatever is built has to account for that, or the
-   lookup just moves the forgery one field over.
+2. **A danger to be closed, not a design to be implemented.** Stated as the
+   hazard first, because the original phrasing named the dangerous design in
+   the voice of a decision and a builder could implement it as written:
 
-   This constraint names a **danger to be closed, not a design to be
-   implemented.** Read as an instruction it says the opposite of what it
-   means. The closure is in section 4: identity is taken from the manifest on
-   the target branch, never from the change under review. A builder who
-   implements the ruling and stops before the next section will build the
-   exact hole the constraint was warning about.
+   > if the pack version and pack identity are read from the project's own
+   > manifest, a change can point at a different pack version whose hashes
+   > suit it, and the lookup has just moved the forgery one field over.
+
+   **The closure, which is part of this ruling and not a later refinement:
+   identity is taken from the manifest already merged into the target branch,
+   never from the change under review, and the publishing repository is a
+   constant compiled into the gate, never read from any manifest.** Both
+   belong here rather than only in the specification, because a builder who
+   reads a ruling and stops at the end of its "what was decided" section must
+   not be able to build the hole it exists to prevent.
 
 Also settled, and not to be reopened: **a human reading the manifest diff is
 not the control.** It was considered and rejected as the primary mechanism,
@@ -75,8 +79,12 @@ here because section 4 depends on them:
   would then be excluded. The array is as writable as the fields around it.
 - **The general rule under all three of the above:** anything the change under
   review can write is evidence, never authority. This design has been defeated
-  three times, each time by a different field that had been read as
-  authoritative. Apply the rule to every new field before adding one.
+  four times, each time by a different input that had been read as
+  authoritative: the per-file hash, then `shippedSha256` beside it, then the
+  `files` array, then the publishing repository itself, which the document had
+  never named. Apply the rule to every new input before adding one, and keep
+  the specification's input inventory exhaustive, because a principle does not
+  enumerate and each of the four was an input nobody had written down.
 
 ## Not covered by this ruling
 
