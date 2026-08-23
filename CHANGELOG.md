@@ -9,6 +9,65 @@ text under it.
 
 ## [Unreleased]
 
+- **Adds `bin/lay-pack.sh`, the layering tool.** It copies selected skills from
+  the corrected pack committed here into a project repository and records what
+  it wrote in a schema 4 `.vendored-skills.json`. It never clones upstream,
+  never reaches the network, and never corrects anything at lay-down time.
+  `--skills` is required and there is deliberately no way to say "all of them":
+  taking every skill is how one project ended up with 165 of its 194 tracked
+  files being skill copies, and a default of "everything" would recreate that
+  on the first hurried run.
+- Carries forward, unchanged, the mechanics from `vendor-skills.sh` that were
+  already right: a per-file sha256 recorded at write time, a refusal to
+  overwrite a file whose on-disk hash has moved, a refusal to touch a file the
+  manifest never recorded, `--forget` as the single deliberate override that
+  deletes nothing and adopts unrecorded files, orphans reported and never
+  deleted, `--dry-run`, `--list`, and exit 2 for finished-but-skipped.
+- **Refuses to lay down while the pack tree is dirty.** `packCommit` would
+  otherwise name a commit whose content is not what was copied, and the
+  disagreement surfaces much later, in another repository, as a hash mismatch
+  with no visible cause.
+- **Validates every path in a manifest as it is read**, against that pack's own
+  recorded skills. Paths this run builds cannot be wrong; entries carried
+  forward for a skill not named in `--skills` come off disk and can be. An
+  earlier arrangement checked only what survived to be written, and a path
+  malformed enough was quietly dropped instead of refused, which fails safe and
+  fails silently.
+- Reports a skill recorded in the manifest and not named in `--skills` rather
+  than dropping it, and exits 2. Silent narrowing would leave its files on disk
+  and unrecorded, which is the exact state every future run skips and
+  `--forget` exists to dig people out of.
+- Prints a distinct line when a run placed nothing at all, so "finished, wrote
+  nothing" cannot read like "finished, everything was already correct".
+- **Adds `test/`, a suite of 13 test files and 122 checks, and `test/run.sh`,
+  which fails rather than reporting an empty pass when it discovers no tests.**
+  Every guard above was proven by mutation: apply it, show the mutation landed
+  before reading any result, run the test, require it to fail, restore by file
+  copy. 13 of 13 guards proven, with the unmutated control run first.
+- **Both superseded scripts now refuse to run**, naming the replacement.
+  `vendor-skills.sh` clones upstream's latest default branch and writes a
+  schema 1 manifest over a schema 4 one, so leaving it merely discouraged left
+  a real hazard one habit away. The refusal is unconditional: no environment
+  override, because a hook that lets a test skip a guard becomes the only route
+  through once the guarded path rots.
+- **Re-measured which skill directories each reader actually loads**, which the
+  specification had promised and was carrying forward from an earlier trace.
+  Recorded in `docs/decisions/2026-08-23-skill-directories-measured.md`. The
+  conclusion held, two directories rather than three, and **the stated reason
+  was wrong and is corrected**: local Cursor loads all three directories, so
+  `.cursor/skills/` is redundant because Cursor reads a superset, not because
+  Cursor ignores it. The two readings are identical locally and opposite for a
+  cloud agent, which is the next question this rule gets consulted for.
+- Records that asking a model to list its own skills failed here as a **false
+  negative**, reporting "NONE AVAILABLE" for a skill that demonstrably loaded.
+  The same instrument was already known to fail as a false positive. The
+  replacement never asks the model about skills: it puts an unguessable token
+  in the part a loader injects and reads the tool-call ordering, with an empty
+  control showing what searching looks like when nothing was injected.
+- Settles the stale open question about tag protection, which said this
+  repository had no tags and no rulesets while section 4 described the rule as
+  in place. Re-checked against the host rather than taken from a report.
+
 - Publishes `packs/superpowers/files.json`, the hash map a merge gate resolves
   a release against: schema 1, 52 entries covering every tracked file under
   `packs/superpowers/skills`, keys pack-relative, hashes SHA-256 over the

@@ -1,11 +1,12 @@
 # skillstack: spec
 
-**Status:** the corrected pack is built and merged. Section 4 is a settled
+**Status:** the corrected pack is built and merged, and **the layering tool is
+built**: `bin/lay-pack.sh`, with a test suite in `test/`. Section 4 is a settled
 contract between this repository and the guardrail toolkit that reads the
-manifest; everything it describes on the reading side is specified and not yet
-built on either side. The layering tool itself does not exist yet: `bin/` still
-holds only the two carried-forward scripts, copied in unmodified, both of which
-section 6 marks superseded.
+manifest. The **writing** side of that contract now exists; the **reading**
+side, the merge gate itself, is specified here and not built. The two
+carried-forward scripts in `bin/` are still present as references and now
+refuse to run.
 
 ## 1. The problem this solves
 
@@ -103,9 +104,9 @@ hand are currently missing it.
 
 See `docs/decisions/2026-08-19-store-a-corrected-snapshot.md`.
 
-## 3. What the tool does (not yet built)
+## 3. What the tool does
 
-Conceptually, replacing `bin/vendor-skills.sh` with something that:
+`bin/lay-pack.sh` replaces `bin/vendor-skills.sh`. It:
 
 1. Lets the caller name which skills to take from a pack, not just which
    pack — closing gap 1 above.
@@ -142,9 +143,14 @@ Conceptually, replacing `bin/vendor-skills.sh` with something that:
    not diff against a recorded upstream commit; it clones the latest default
    branch, walks every file, and copies by fingerprint.
 
-None of this is implemented here. This section states intent so the manifest
-shape in section 4 is grounded in what will eventually write and read it,
-not designed in a vacuum.
+Points 1 to 3 are implemented in `bin/lay-pack.sh`. Point 4, propagation, is
+partly implemented: a project picks up a new pack version by re-running the
+tool against a newer checkout of this repository, and the tool refuses to run
+at all while the pack tree is dirty, so `packCommit` cannot record a commit
+whose content is not what was copied. What is still missing is the
+pack-cutting step itself, which would cut a version and generate
+`packs/<pack>/files.json`; today that map was produced once by hand. Nothing
+in the tool assumes that step exists.
 
 ## 4. The manifest shape
 
@@ -395,13 +401,29 @@ normalization:
    (`SKILL.md`).
 3. It names a file, not a directory (no trailing `/` after normalization).
 
-**`.cursor/skills/` is not an allowed location in schema 4.** The reason is
-that Cursor and Codex both read `.agents/skills/`, which makes a third copy
-redundant. That rests on a loader-trace measurement taken on 2026-08-17 and
-2026-08-18, carried here from a prior session's record rather than re-run for
-this document. It is the load-bearing fact for the narrowing, so it is being
-re-measured under DAR-157 and the transcripts will be recorded with that
-decision. **If the re-measurement contradicts it, this rule is what changes.**
+**`.cursor/skills/` is not an allowed location in schema 4.** The re-measurement
+this rule was waiting on was run on 2026-08-23 and is recorded in
+`docs/decisions/2026-08-23-skill-directories-measured.md`. It confirmed the
+conclusion and **corrected the reason**, which an earlier revision of this
+document stated wrongly.
+
+Measured: Claude Code loads `.claude/skills/` only. Codex loads
+`.agents/skills/` only. **Local Cursor loads all three, `.cursor/skills/`
+included.** So two directories cover every local reader, and `.cursor/` is
+redundant because Cursor reads a **superset**, not because Cursor ignores it.
+
+The earlier wording said Cursor and Codex both read `.agents/skills/`, "which
+makes a third copy redundant". True, and not the whole fact. The two readings
+are indistinguishable locally and opposite for a cloud agent: a superset says
+nothing about which directory cloud reads, while "Cursor ignores `.cursor/`"
+would have settled it. The wrong reason is corrected here rather than left
+standing behind a surviving conclusion, because the next question this rule is
+consulted for is the cloud one.
+
+**What cloud does is not yet measured**, and it is the open case. Local Cursor
+reading all three means local behaviour cannot distinguish the layouts, so
+neither the measurement above nor any prior local observation bears on it. **If
+a cloud agent turns out to read `.cursor/skills/`, this rule is what changes.**
 
 Anything else — including project source, configuration, or a skill directory
 not named in `"skills"` — is not pack content for this mechanism even if
@@ -792,10 +814,20 @@ gets solved and this repository would benefit from kit's checks over its own
 
 ## 6. `vendor-skills.sh` and `soften-tdd.py`: carried forward vs. superseded
 
-Both are copied into `bin/` in this repository, unmodified, and the originals
-in the maintainer's personal config repository are untouched. Neither should
-be run against a new project from this point forward; they are kept for
-reference while the replacement is designed and built as separate work.
+Both are in `bin/` in this repository, and the originals in the maintainer's
+personal config repository are untouched. **Both now refuse to run**, with a
+message naming `bin/lay-pack.sh`. They were previously described here as
+scripts that "should not be run", which is a preference rather than a control:
+`vendor-skills.sh` in particular clones upstream's latest default branch and
+writes a schema 1 manifest straight over a schema 4 one, so someone running it
+by habit destroys the record a gate resolves published hashes against. They
+are kept, unrun, as the readable reference for what was carried forward and
+what was not.
+
+The refusal is unconditional. There is deliberately no environment override
+"so the tests can still exercise the old path": a hook that lets a test skip a
+guard becomes the only route through once the guarded path rots, and then
+every test takes it and the guard has never run.
 
 ### `vendor-skills.sh` — carried forward in mechanism, superseded in design
 
@@ -847,15 +879,16 @@ lists, for the same reason.
 
 ## 7. Open questions for the maintainer
 
-1. **REQUIRED: a tag protection rule on this repository.** Section 4 rests
-   the whole gate on release tags being immutable, and a tag is only immutable
-   if the host enforces it. The rule must forbid rewriting and deleting any
-   tag matching `*-v*`. This repository currently has no tags and no rulesets.
-   Creating the rule is a repository setting, so it is the maintainer's call,
-   not something this document or the tool can do. Until it exists, and until
-   the first tag is cut, every project resolves `release not found` and
-   nothing is excluded anywhere. That is the correct failure, but it is a
-   failure, and it is the state today.
+1. **Settled: the tag protection rule exists.** This item asked for one and
+   said the repository had no tags and no rulesets, which stopped being true
+   on 2026-08-23 and contradicted section 4, which describes the rule as in
+   place. Re-checked against the host on 2026-08-23 rather than taken from
+   the earlier report: the ruleset "release tags are immutable" is active,
+   targets `refs/tags/*-v*`, forbids deletion, non-fast-forward and update,
+   and has an empty bypass list with `current_user_can_bypass: never`. The
+   first release tag, `superpowers-v0.1.0`, is cut and annotated and peels to
+   a commit on `main`. Section 4 states how far that protection goes and
+   where it stops, which is at an administrator who disables it first.
 
    The manifest shape itself is **settled** and no longer an open question.
    The maintainer ruled on 2026-08-20 that the gate asks `skillstack` for the

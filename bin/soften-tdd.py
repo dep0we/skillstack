@@ -17,6 +17,38 @@ silently leave one copy dangerous.
 Exits non-zero on every failure, including finding no copies at all. A check
 that cannot find its target must never look like a clean result.
 """
+
+# ---------------------------------------------------------------- SUPERSEDED
+#
+# Kept as a readable reference for why correcting at lay-down time was
+# abandoned, and it must not be run against a project again.
+#
+# Its scope is proven too narrow to trust. It opens every path matching
+# */skills/test-driven-development/SKILL.md and replaces three exact phrases in
+# each copy. Adversarial review of a real import found the same
+# delete-the-code instruction live and untouched in three files this script
+# never opens, and four more instances inside each file it does open, in
+# wording its three-phrase list does not match. A correction that only proves
+# itself against the exact file and wording it was written for, with no signal
+# when upstream rewords, is not a mechanism to carry forward.
+#
+# Corrections are applied once now, when a pack version is cut, and the pack
+# ships already corrected. Nothing corrects at lay-down time.
+# There is deliberately no environment override. A hook that lets a test skip a
+# guard becomes the only way through once the guarded path rots, and then every
+# test uses it and the guard has never run.
+import sys as _sys
+
+_sys.stderr.write(
+    "error: soften-tdd.py is superseded and refuses to run.\n\n"
+    "It matched three exact phrases in one file name, and adversarial review\n"
+    "found the same instruction live in files it never opens. Corrections are\n"
+    "applied once, when a pack version is cut, and packs/ ships corrected.\n\n"
+    "Use instead:\n"
+    "  bin/lay-pack.sh --pack <name> --skills a,b,c <project>\n"
+)
+raise SystemExit(1)
+
 import sys
 from pathlib import Path
 
