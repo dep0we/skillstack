@@ -42,6 +42,34 @@
 
 set -uo pipefail
 
+# ---------------------------------------------------------------- SUPERSEDED
+#
+# This script is kept as a readable reference for the manifest mechanics that
+# were carried forward, and it must not be run against a project again.
+#
+# Two reasons it is dangerous now rather than merely out of date. It clones
+# upstream's latest default branch, so what it copies is whatever upstream said
+# today and nobody reviewed it. And it writes the schema 1 manifest, keyed by
+# repository URL with no pack concept, straight over a schema 4 manifest,
+# destroying the record that a gate resolves published hashes against.
+#
+# Use bin/lay-pack.sh instead.
+# There is deliberately no way past this. An environment override "so the tests
+# can still exercise it" is a bypass wearing a test's clothes: the guarded path
+# rots, the override becomes the only route through, and every test takes it.
+cat >&2 <<'SUPERSEDED'
+error: vendor-skills.sh is superseded and refuses to run.
+
+It clones upstream's latest default branch rather than copying the reviewed
+pack in this repository, and it writes a schema 1 manifest over a schema 4 one.
+
+Use instead:
+  bin/lay-pack.sh --pack <name> --skills a,b,c <project>
+
+Run bin/lay-pack.sh with no --skills to see what a pack contains.
+SUPERSEDED
+exit 1
+
 DEFAULT_REPO="https://github.com/obra/superpowers"
 DEFAULT_SUBDIR="skills"
 MANIFEST_NAME=".vendored-skills.json"

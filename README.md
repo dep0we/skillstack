@@ -20,29 +20,54 @@ declaration that keeps a shipped script running on a current Node runtime.
 `skillstack` exists so that work happens once, in one place, and every project
 gets the same result.
 
-## What's here right now
+## Laying a pack into a project
 
-This repository currently holds a specification and a scaffold, not the
-finished tool. See `docs/SPEC.md` for the full design, including:
+```
+bin/lay-pack.sh --pack superpowers --skills a,b,c /path/to/project
+```
 
-- what a "skill pack" is
-- what the (not-yet-built) tool will do
-- the manifest shape a project carries after a pack is layered in, which a
-  separate reader (the `kit` merge gate, in a different repository) needs to
-  be able to validate on its own
-- which parts of the existing vendoring script are carried forward and which
-  are superseded
+Run it without `--skills` to see what a pack contains. There is deliberately
+no way to say "all of them": taking every skill is how one project ended up
+with 165 of its 194 tracked files being skill copies.
 
-`bin/` carries forward, unmodified, the two scripts this replaces:
+Files are written into `.claude/skills/` and `.agents/skills/`, which is the
+minimum set covering Claude Code, Codex and Cursor. Which reader loads which
+directory was measured, not read from documentation; see
+`docs/decisions/2026-08-23-skill-directories-measured.md`.
 
-- `bin/vendor-skills.sh` — the current working vendoring tool, copied from
-  the maintainer's personal config repository. Its per-file hash and
-  hand-edit-refusal mechanics are the foundation the new tool builds on. Its
-  all-or-nothing, no-selection, no-corrections design is what it replaces. Do
-  not run it against a new project going forward; see `docs/SPEC.md`.
-- `bin/soften-tdd.py` — the current, too-narrow correction script (three
-  skill-directory copies of one file, three phrases each), copied from the
-  same place. Fully superseded; kept for reference only.
+The tool records every file it writes, with a hash, in `.vendored-skills.json`
+at the project root. On a later run, a file whose hash has moved since it was
+laid down is reported and skipped rather than overwritten, and the run exits 2.
+`--forget <skill>` is the one deliberate way past that, and it deletes nothing.
+Nothing this tool does ever deletes a file.
+
+Other flags: `--dry-run` writes nothing at all, and `--list` reports what a
+project already holds.
+
+## What's here
+
+- `packs/<name>/` — the corrected snapshot that ships, its corrections as a
+  separate record, and the upstream copyright notice the licence requires to
+  travel with a copy.
+- `bin/lay-pack.sh` — the layering tool, and `test/` its suite.
+- `docs/SPEC.md` — the full design, including the manifest shape a project
+  carries afterwards, which a separate reader in another repository (a merge
+  gate) has to be able to validate on its own.
+- `docs/decisions/` — the rulings, each with what it cost and what was
+  accepted.
+
+`bin/` also holds the two superseded scripts this replaces. **Both refuse to
+run.** They are kept because they are the readable reference for what was
+carried forward and what was not:
+
+- `bin/vendor-skills.sh` — the previous vendoring tool. Its per-file hash and
+  hand-edit-refusal mechanics are the foundation `lay-pack.sh` builds on. It
+  clones upstream's latest default branch and writes a schema 1 manifest,
+  which is why it refuses rather than merely being discouraged.
+- `bin/soften-tdd.py` — the previous correction script, matching three exact
+  phrases in one file name. Review of a real import found the same instruction
+  live in three files it never opens. Corrections are applied once now, when a
+  pack version is cut, so nothing corrects at lay-down time.
 
 ## Upstream default
 
