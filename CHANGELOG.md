@@ -9,6 +9,22 @@ text under it.
 
 ## [Unreleased]
 
+- Third review round on the section 4 contract, and it converged. No fifth
+  defeat, none of the four returned, and closing the previous fourteen
+  introduced nothing. **One finding, ruled non-blocking, now closed.** A
+  deleted manifest was assigned two outcomes: `identity changed` in the
+  procedure and `proposed manifest unreadable` in the outcome list, each
+  restated in the other's text. One condition, two labels, so two builders
+  would ship different lines. It was ruled non-blocking because a blocking
+  finding has to name a concrete failure, and both readings refuse to exclude:
+  the verdict is identical and correct in either gate, and only the printed
+  name differs. Resolved toward `identity changed`, because going from present
+  to absent is the most complete change of identity there is and is a more
+  specific statement than "could not read it", leaving
+  `proposed manifest unreadable` to mean the file exists and will not parse.
+  Both outcomes now say which case is theirs and which is not, so a later
+  reader does not re-split them.
+
 - Second review round on the section 4 contract: fourteen findings, none of
   them a live defeat. **The inventory claimed to be exhaustive and was not**,
   missing seven inputs including the published map's own fetch path, the

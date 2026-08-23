@@ -591,10 +591,13 @@ does not spuriously turn exclusion off, and a doctored `sha256` buys nothing.
   required field: `manifest rejected`, never `not applicable — empty packs`.
   The two readings differ in what they permit, and the permissive one excludes
   files on the strength of a malformed file.
-- **A proposed manifest that is absent or unparseable** cannot be compared, so
-  it is `proposed manifest unreadable` and excludes nothing. It is not the
-  same as `manifest rejected`, which is about the baseline, and it is not
-  `identity changed`, which asserts a comparison that did not happen.
+- **A proposed manifest that is present and unparseable** cannot be compared,
+  so it is `proposed manifest unreadable` and excludes nothing. It is not
+  `manifest rejected`, which is about the baseline. **An absent proposed
+  manifest is not this case**; deletion is `identity changed`, per the first
+  bullet above. The line between them is whether the file is there: present
+  and unreadable is one condition, gone is another, and each has exactly one
+  outcome.
 
 ### The outcomes, which must never print the same result
 
@@ -636,14 +639,17 @@ contract, not an implementation detail left to the reader.
   list, including the naming grammar, the allowed locations and a missing
   required field; they share this outcome because they share a remedy, and
   they are told apart by the named rule in the output, which is required.
-- **`proposed manifest unreadable`** — the manifest at the commit under review
-  is absent or is not valid JSON, so no comparison was possible. Distinct from
-  `manifest rejected`, which is about the baseline, and from
-  `identity changed`, which asserts a comparison that did happen.
+- **`proposed manifest unreadable`** — the manifest **exists** at the commit
+  under review and is not valid JSON, so no comparison was possible. Distinct
+  from `manifest rejected`, which is about the baseline. A manifest that is
+  **absent** is not this outcome; see `identity changed`.
 - **`identity changed`** — the proposed manifest differs from the baseline for
   this pack, per the definition above. Names which field, and for a set
-  difference, which members. A deleted manifest reaches this outcome, not a
-  `not applicable` one.
+  difference, which members. **A deleted manifest reaches this outcome**, and
+  neither `not applicable` nor `proposed manifest unreadable`: going from
+  present to absent is the most complete change of identity there is, and it
+  is a more specific statement about what happened than "could not read it."
+  Stated here so the two are not re-split by a later reader.
 - **`lookup failed`** — the reachability request against the pinned repository
   did not return its expected success. The source could not be consulted.
   Never conflated with any answer the source might have given.
