@@ -54,10 +54,26 @@ text under it.
   specification had promised and was carrying forward from an earlier trace.
   Recorded in `docs/decisions/2026-08-23-skill-directories-measured.md`. The
   conclusion held, two directories rather than three, and **the stated reason
-  was wrong and is corrected**: local Cursor loads all three directories, so
+  was wrong and is corrected**: Cursor loads all three directories, so
   `.cursor/skills/` is redundant because Cursor reads a superset, not because
-  Cursor ignores it. The two readings are identical locally and opposite for a
-  cloud agent, which is the next question this rule gets consulted for.
+  Cursor ignores it. The two readings are identical locally and would have been
+  opposite for a cloud agent, which is the next thing the rule was consulted
+  for.
+- **Measured the Cursor cloud case**, which had never been instrumented and is
+  the premise the whole approach rests on. A cloud agent, given a prompt with no
+  unusual string in it, fired the skills in `.claude/`, `.agents/` and
+  `.cursor/`, and did not fire an identical decoy skill in a directory no loader
+  reads. All four were equally findable, so a browsing agent returns four tokens
+  and a loader-driven agent returns exactly three: **the decoy is what carries
+  the proof, not the tokens.** Cursor cloud behaves exactly like local Cursor, so
+  two directories is correct there too, and **a committed skill reaches a cloud
+  agent and fires unprompted.**
+- Records that the first two cloud probe designs were void, and why. The first
+  put the trigger words in the prompt, handing a searching agent a perfect
+  query. The second carried a README documenting the instrument, including a
+  table of every token against its directory, so **the fixture contained its own
+  answer key**. Both were more elaborate than the design that worked; the third
+  succeeded because of its control, not its cleverness.
 - Records that asking a model to list its own skills failed here as a **false
   negative**, reporting "NONE AVAILABLE" for a skill that demonstrably loaded.
   The same instrument was already known to fail as a false positive. The

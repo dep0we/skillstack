@@ -408,22 +408,26 @@ conclusion and **corrected the reason**, which an earlier revision of this
 document stated wrongly.
 
 Measured: Claude Code loads `.claude/skills/` only. Codex loads
-`.agents/skills/` only. **Local Cursor loads all three, `.cursor/skills/`
-included.** So two directories cover every local reader, and `.cursor/` is
-redundant because Cursor reads a **superset**, not because Cursor ignores it.
+`.agents/skills/` only. **Cursor loads all three, `.cursor/skills/` included,
+and does so both locally and as a cloud agent.** So two directories cover every
+reader, and `.cursor/` is redundant because Cursor reads a **superset**, not
+because Cursor ignores it.
 
 The earlier wording said Cursor and Codex both read `.agents/skills/`, "which
 makes a third copy redundant". True, and not the whole fact. The two readings
-are indistinguishable locally and opposite for a cloud agent: a superset says
-nothing about which directory cloud reads, while "Cursor ignores `.cursor/`"
-would have settled it. The wrong reason is corrected here rather than left
-standing behind a surviving conclusion, because the next question this rule is
-consulted for is the cloud one.
+are indistinguishable locally and would have been opposite for a cloud agent: a
+superset says nothing about which directory cloud reads, while "Cursor ignores
+`.cursor/`" would have settled it. The wrong reason is corrected here rather
+than left standing behind a surviving conclusion, because the cloud question is
+the next thing this rule was consulted for.
 
-**What cloud does is not yet measured**, and it is the open case. Local Cursor
-reading all three means local behaviour cannot distinguish the layouts, so
-neither the measurement above nor any prior local observation bears on it. **If
-a cloud agent turns out to read `.cursor/skills/`, this rule is what changes.**
+**The cloud case is measured, not assumed, and it agrees.** A cloud agent given
+a prompt containing no unusual string fired the skills in `.claude/`, `.agents/`
+and `.cursor/`, and did not fire an identical decoy skill placed in a directory
+no loader reads. All four were equally findable, so a browsing agent returns
+four and a loader-driven agent returns exactly three. That also settles the
+premise underneath this whole approach: **a committed skill reaches a cloud
+agent and fires unprompted.**
 
 Anything else — including project source, configuration, or a skill directory
 not named in `"skills"` — is not pack content for this mechanism even if

@@ -1,8 +1,8 @@
 # Which skill directories a pack is laid into, measured
 
 **Date:** 2026-08-23
-**Status:** accepted for local readers. The cloud case is open and is tracked
-separately; see "What is still unmeasured" below.
+**Status:** accepted. Local readers measured first; the Cursor cloud case was
+measured afterwards on the same day and agrees. Nothing here is outstanding.
 **Supersedes:** nothing. It supplies the measurement `docs/SPEC.md` promised at
 its allowed-locations rule, and corrects the reason that rule gave.
 **Reversible:** yes, cheaply. The destination list is one named constant in
@@ -47,10 +47,10 @@ a reader naming one cannot be naming something it already knew.
 | Claude Code 2.1.241 | **loads** | no | no |
 | Codex CLI 0.147.0 | no | **loads** | no |
 | Cursor CLI 2026.08.11, local | **loads** | **loads** | **loads** |
+| Cursor cloud agent | **loads** | **loads** | **loads** |
 
-Minimum set covering all three local readers: **`.claude/skills/` and
-`.agents/skills/`**. Two directories, which is the conclusion the
-specification already carried.
+Minimum set covering every reader: **`.claude/skills/` and `.agents/skills/`**.
+Two directories, which is the conclusion the specification already carried.
 
 ## The conclusion held. The stated reason did not.
 
@@ -112,31 +112,75 @@ before it. The control shows what searching looks like when nothing was
 injected, and it looks nothing like a direct read. That control could have come
 out the other way, and it did.
 
-## What is still unmeasured, and why it matters more than it looks
+## The cloud case, measured separately, and it took three attempts
 
-**Whether a Cursor cloud agent loads committed skills, and from which
-directory.** Neither is known. Two separate questions:
+Two questions needed answering, and they are different:
 
-1. *Does a committed skill reach a cloud agent at all?* This is the premise the
-   whole approach rests on: skills are committed rather than installed because
-   a cloud agent clones the repository into an isolated VM with no access to
-   the maintainer's laptop. Nobody has instrumented it. There is one prior
-   observation that it appeared to work, which is an observation and not an
-   instrument.
-2. *Which directory does cloud read?* This is what decides whether the
-   narrowing to two is safe.
+1. *Does a committed skill reach and load for a cloud agent at all?* This is the
+   premise the whole approach rests on. Skills are committed rather than
+   installed because a cloud agent clones the repository into an isolated VM
+   with no access to the maintainer's laptop. It had never been instrumented.
+2. *Which directory does cloud read?* This decides whether two is safe.
 
-**Local Cursor cannot answer either, and this is exactly why the corrected
-reason matters.** Locally Cursor reads all three, so every layout works and
-local behaviour distinguishes nothing. The earlier successful observation was
-made against a repository carrying all three directories, so it is blind for
-the same reason.
+**Local behaviour answers neither.** Local Cursor reads all three, so every
+layout works locally and local evidence distinguishes nothing. A prior
+successful observation was made against a repository carrying all three
+directories, so it was blind for the same reason.
 
-Until question 2 is answered, the narrowing to two ships on local evidence
-only. The exposure is bounded: no project has been laid down with this tool
-yet, so the window is between now and that measurement, with nothing in it. If
-cloud turns out to read `.cursor/skills/`, the allowed-locations rule is what
-changes, exactly as the specification already provides for.
+### The fixture
+
+One repository, four skills, each triggered by an ordinary request and each
+instructing a token instead of a normal answer. **The prompt contains no unusual
+string at all**, which is the point: an agent that goes searching has no query.
+
+| directory | request | token |
+| --- | --- | --- |
+| `.claude/skills/` | name a colour | `ALPHA-4471` |
+| `.agents/skills/` | name a fruit | `BETA-8823` |
+| `.cursor/skills/` | name a city | `GAMMA-1907` |
+| `.zzz-not-a-skill-dir/skills/` | name an animal | `DELTA-6250` |
+
+Prompt: *Name a colour. Name a fruit. Name a city. Name an animal. Name a
+musical instrument.*
+
+Two controls, one for each way this can lie. **The decoy** sits in a directory
+no loader reads; if it fires, the agent is browsing the tree rather than being
+handed skills, and the run is void rather than positive. **The absent case**, a
+musical instrument, is handled by no skill anywhere; a token there means
+fabrication.
+
+### The result
+
+    Colour: ALPHA-4471
+    Fruit: BETA-8823
+    City: GAMMA-1907
+    Animal: otter
+    Instrument: cello
+
+Both controls held. The decoy did not fire and nothing was fabricated, so the
+run is valid. All three loader directories fired.
+
+**What carries the conclusion is the decoy, not the tokens.** All four skill
+files are equally findable: same shape, same depth, same trigger phrasing, one
+glob apart. An agent that browses or greps finds four. This agent produced
+exactly three, and the only property separating them is that three sit in
+directories a loader reads.
+
+**The files were opened, and that is the mechanism working, not a flaw.** Each
+token lives in the body of its `SKILL.md`, not in the frontmatter description.
+A loader surfaces a skill's name and description; the agent matches the trigger
+and opens the file for the instructions. So a token coming back proves the file
+was opened, and the decoy proves the agent was told which file to open. An
+earlier design treated opening the file as contamination, which is backwards and
+is why that design could produce no meaningful result.
+
+### What this settles
+
+Committed skills reach a cloud agent and fire unprompted. Cursor cloud reads all
+three directories, exactly as local Cursor does, so it is covered by either
+`.claude/` or `.agents/`. **Two directories is correct, and `.cursor/skills/` is
+redundant in cloud as well as locally, for the same reason: a superset, not an
+omission.**
 
 ## What was asked for and not done
 
