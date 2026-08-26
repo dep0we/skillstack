@@ -49,5 +49,43 @@ run_lay "$out" --pack "$PACK" --skills "brainstorming" "$t"
 check_eq "the same command succeeds on an undoctored manifest" 2 "$?"
 check_fails "and refuses nothing" grep -q "refusing this manifest" "$out"
 
+# --list reads the same manifest and has to apply the same rule to it.
+#
+# It did not, from 2026-08-23 until this test was written. The call to
+# assert_manifest_paths_ok sat 93 lines above the definition, so bash resolved
+# the name to nothing, printed "command not found" to stderr, SKIPPED the call
+# and carried on, and --list printed a listing and exited 0 over a manifest
+# recording "../../../etc/passwd". Every check above passed throughout, because
+# every one of them exercises the lay-down path, where the same call sits below
+# the definition and runs.
+for bad in \
+  "../../../etc/passwd" \
+  "/etc/passwd" \
+  ".claude/skills/executing-plans/../../../escape.md" \
+  ".cursor/skills/executing-plans/SKILL.md" \
+  "src/app.ts"
+do
+  cp "$m" "$m.orig"
+  doctor "$bad"
+  if ! grep -Fq "$bad" "$m"; then
+    fail "the doctored entry '$bad' did not land, so this --list case proved nothing"
+    cp "$m.orig" "$m"; continue
+  fi
+  run_lay "$out" --list "$t"
+  rc=$?
+  check_eq "--list refuses '$bad'" 1 "$rc"
+  check "--list names the path it refused ($bad)" grep -Fq "$bad" "$out"
+  check_fails "--list printed no listing for '$bad'" grep -q "packVersion:" "$out"
+  cp "$m.orig" "$m"
+done
+rm -f "$m.orig"
+
+# The same control as above: --list has to still work on an honest manifest, or
+# every refusal it just made could have had any cause at all.
+run_lay "$out" --list "$t"
+check_eq "--list succeeds on an undoctored manifest" 0 "$?"
+check "--list still prints the listing" grep -q "packVersion:" "$out"
+check_fails "and refuses nothing" grep -q "refusing this manifest" "$out"
+
 rm -rf "$t" "$out"
 finish
