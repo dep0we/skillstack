@@ -9,6 +9,45 @@ text under it.
 
 ## [Unreleased]
 
+- **`lay-pack.sh` now appends `.superpowers/` to the target's `.gitignore`.**
+  The skills it copies in write live session state into the working tree the
+  moment they run: the brainstorming companion server writes a 64-character
+  session key in cleartext to `.superpowers/brainstorm/.last-token` and embeds
+  the same key in a `?key=` URL in that session's `server-info` and
+  `server.log`, and `subagent-driven-development` writes plan workspaces under
+  `.superpowers/sdd/`. Measured in a target with no such rule: after
+  `git add -A` and a commit the key was tracked in two files, and a credential
+  scanner over the diff exited 0 and reported a pass, because its generic rule
+  wants a `key`/`token`/`secret` word and a quoted value and a bare hex blob has
+  neither. The pack's own documentation says to remind the user to add the rule,
+  and that reminder is what left the hole: four repositories fixed it by hand
+  after the fact. The tool that copies the skills in is the only party that
+  knows the writes are coming.
+- Presence of the rule is asked of `git check-ignore --no-index`, never grepped
+  out of the file, and the run proves the probe paths are covered after writing
+  rather than assuming the append worked. A rule can be present and undone by a
+  later negation, and a path can be covered by a rule in a file this tool never
+  opened; grepping answers neither question. `--no-index` is what keeps an
+  already-committed leak from making every run append the rule again.
+- The rule is appended, never rewritten. A missing final newline is repaired
+  first so the rule cannot land on the end of somebody else's line, a target
+  that already has the rule is left byte-identical, and a `--dry-run` writes
+  nothing and says what it would have appended.
+- **Session state already committed is reported and exits 2**, because an
+  ignore rule does not untrack a tracked file and the credential is already in
+  history. Exit 2 now means "finished, but something needs a decision" and
+  covers that case alongside skipped files and unselected skills.
+- The rule is deliberately not recorded in `.vendored-skills.json` and
+  `.gitignore` is deliberately not a destination directory. The allowed-location
+  list is the rule a merge gate applies to every manifest path, so widening it
+  to hold a `.gitignore` entry would widen it for every path in every project,
+  and schema 4 is a contract with a reader in another repository that should not
+  have to change for something `git check-ignore` reports directly.
+- `--help` no longer ends with a stray `set -uo pipefail`. `usage()` prints a
+  fixed line range out of the file's own header, and the range ran one line past
+  the end of that header. The new exit-code text made the header a line longer,
+  which moved the stray line off the end; the range is now pinned to where the
+  header actually stops.
 - **`--list` validated no manifest path at all, and exited 0 saying so.** The
   call to `assert_manifest_paths_ok` sat 93 lines above the definition. Bash
   resolves a function name when the call runs, not when the file is parsed, so

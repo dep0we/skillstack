@@ -152,6 +152,77 @@ pack-cutting step itself, which would cut a version and generate
 `packs/<pack>/files.json`; today that map was produced once by hand. Nothing
 in the tool assumes that step exists.
 
+### What the tool writes into a project
+
+Exactly three things, and nothing else:
+
+1. **Pack files**, under the allowed destination directories named in section
+   4. This is the only category a merge gate ever reads, and the only one
+   recorded in `files`.
+2. **`.vendored-skills.json`** at the project root.
+3. **One ignore rule, `.superpowers/`, appended to the project's
+   `.gitignore`.**
+
+The third exists because the skills being copied in write live session state
+into the working tree the moment they run, and the project has no way to know
+that before it happens. The brainstorming companion server writes a
+64-character session key in cleartext to
+`.superpowers/brainstorm/.last-token`, and embeds the same key in a `?key=`
+URL in that session's `state/server-info` and `server.log`.
+`subagent-driven-development` writes plan workspaces under `.superpowers/sdd/`.
+
+Measured on 2026-08-25 in a target repository with no such rule: after
+`git add -A` and a commit, the key was tracked in two files, and a credential
+scanner over the diff exited 0 and reported a pass. The scanner was not
+skipping the path; it was pattern coverage. Its generic rule wants a
+`name`/`key`/`token`/`secret` word, then a separator, then a quoted value, and
+a bare hex blob in a file of its own has none of that. So this is not a gap one
+project's gate closes for the others, and it does not announce itself while it
+is open.
+
+The pack's own `skills/brainstorming/visual-companion.md` already says to
+"remind the user to add `.superpowers/` to `.gitignore` if it's not already
+there". Relying on that reminder is what left the hole: four project
+repositories had to fix it by hand after the fact. The tool that copies the
+skills in is the only party that knows the writes are coming, which makes it
+the party that has to say so.
+
+Four properties, each of which is a test:
+
+- **The rule is unanchored and directory-only.** Unanchored, so a session
+  started with `--project-dir` pointing at a subdirectory is covered too.
+  Directory-only, so `superpowers/notes.md` and `docs/.superpowers-notes.md`
+  are untouched.
+- **Presence is asked of `git check-ignore`, never grepped out of the file.**
+  Those are different questions. A rule can be present and undone by a later
+  negation, and a path can be covered by a rule that is not in this file at
+  all. The probe runs with `--no-index`, because a path already in the index
+  reports "not ignored" without it, which is true of the index and false of
+  the rules, and would make every run append the rule again.
+- **The file is appended to, never rewritten**, and a missing final newline is
+  repaired first so the rule cannot land on the end of somebody else's line. A
+  target that already has the rule is left byte-identical.
+- **Session state already committed is reported, not papered over.** An ignore
+  rule does not untrack a tracked file, and the credential is already in
+  history. The run names the files and exits 2.
+
+**The rule is not recorded in the manifest, and `.gitignore` is not a
+destination directory.** Both would be the wrong shape. The allowed-location
+list in section 4 is the rule a gate applies to every manifest path, so adding
+a third entry to hold `.gitignore` would widen it for every path in every
+project. And schema 4 is a contract with a reader in another repository, which
+should not have to change for this: `git check-ignore` reports the rule's
+presence directly, which is a stronger answer than a field the change under
+review could have written.
+
+**What this does not solve** is the key sitting on disk. `stop-server.sh` does
+not delete a persistent session directory, and the server reads the token back
+on the next start, so the key persists indefinitely and is reused across
+restarts with no rotation. `.gitignore` keeps it out of git; it does nothing
+about a copied, archived or snapshotted working directory, which is exactly
+what a cloud agent's working directory is. That is upstream behaviour and it is
+not corrected here.
+
 ## 4. The manifest shape
 
 **This is the load-bearing decision in this document**, because a project
