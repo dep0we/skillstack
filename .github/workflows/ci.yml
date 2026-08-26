@@ -1,0 +1,49 @@
+name: CI
+
+# Everything in this repository was verified on whichever laptop did the work
+# until this file existed. lay-pack.sh writes into other repositories, so a
+# defect here does not stay here.
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # Printed so a green run can be read against a known environment rather
+      # than assumed. The suite is developed against bash 3.2 on macOS; the
+      # runner is bash 5.x, and shasum is relied on by six test files that,
+      # unlike bin/, carry no sha256sum fallback.
+      - name: Record the environment
+        run: |
+          bash --version | head -1
+          shellcheck --version | sed -n '2p'
+          command -v shasum >/dev/null || {
+            echo "shasum is missing; six test files call it with no fallback" >&2
+            exit 1
+          }
+
+      # run.sh already refuses to report success when it discovers no test
+      # files, so this step cannot pass by finding nothing.
+      - name: Tests
+        run: bash test/run.sh
+
+      # xargs with no input exits 0, which would make this step pass vacuously
+      # if the globs ever stopped matching. Count first, then lint.
+      - name: Shellcheck
+        run: |
+          git ls-files 'bin/*.sh' 'test/*.sh' > /tmp/sh-files
+          count=$(grep -c "" /tmp/sh-files)
+          echo "linting $count files"
+          [ "$count" -gt 0 ] || { echo "matched no scripts" >&2; exit 1; }
+          # Gated at warning: default severity reports 81 findings on a clean
+          # tree, 80 info and 1 style, no errors and no warnings. Roughly 95%
+          # are SC2317/SC2329/SC1091 against the shared-helper test layout.
+          xargs shellcheck -x --severity=warning < /tmp/sh-files
