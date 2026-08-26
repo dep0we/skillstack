@@ -159,56 +159,6 @@ Move the old file aside and re-run to lay the pack down fresh."
   die "$MANIFEST_NAME declares schemaVersion $found, which this tool does not write. Refusing to touch it."
 }
 
-# ------------------------------------------------------------------- --list
-
-if [ "$LIST_ONLY" -eq 1 ]; then
-  if [ ! -f "$MANIFEST" ]; then
-    info "No pack has been laid into $TARGET (no $MANIFEST_NAME)."
-    exit 0
-  fi
-  manifest_json="$(read_manifest)" || exit 1
-  assert_supported_schema "$manifest_json"
-  assert_manifest_paths_ok "$manifest_json"
-  count="$(printf '%s' "$manifest_json" | jq '.packs | length')"
-  if [ "$count" -eq 0 ]; then
-    info "$MANIFEST_NAME is present and records no packs."
-    exit 0
-  fi
-  printf '%s' "$manifest_json" | jq -r '
-    .packs | to_entries[] |
-    "\(.key)\n  packVersion: \(.value.packVersion)\n  packCommit:  \(.value.packCommit)\n  upstream:    \(.value.upstream.repo) @ \(.value.upstream.commit)\n  installed:   \(.value.installedAt)\n  skills:      \(.value.skills | join(", "))\n  files:       \(.value.files | length)"'
-  exit 0
-fi
-
-# ------------------------------------------------------- pack identity rules
-#
-# Pack name and version are interpolated into a release tag and a repository
-# path by the gate that reads the manifest this tool writes. Two packs that
-# produce one tag is the failure these rules exist to stop, and both halves are
-# needed: the version rule alone rejects "bar-v1.0", the name rule alone
-# rejects "foo-vbar". See docs/SPEC.md, "Naming grammar".
-
-valid_pack_name() {
-  printf '%s' "$1" | grep -Eq '^[a-z][a-z0-9]*(-[a-z0-9]+)*$' || return 1
-  printf '%s' "$1" | grep -Eq -- '-v[0-9]' && return 1
-  return 0
-}
-
-valid_pack_version() {
-  printf '%s' "$1" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'
-}
-
-# A skill name becomes a path segment in three places. Anything that could
-# climb out of the destination directory, or collapse two skills onto one
-# path, is refused before it is interpolated anywhere.
-valid_skill_name() {
-  case "$1" in
-    ""|.|..) return 1 ;;
-    */*|*'\'*) return 1 ;;
-  esac
-  printf '%s' "$1" | grep -Eq '^[A-Za-z0-9][A-Za-z0-9._-]*$'
-}
-
 # assert_paths_allowed <json array of {path,sha256}> <allowed skill names...>
 #
 # Every path about to be recorded has to be <one of DEST_DIRS>/<a skill this
@@ -272,6 +222,56 @@ assert_manifest_paths_ok() {
       < <(printf '%s' "$json" | jq -r --arg k "$k" '.packs[$k].skills // [] | .[]')
     assert_paths_allowed "$files" ${skills[@]+"${skills[@]}"}
   done < <(printf '%s' "$json" | jq -r '.packs // {} | keys[]')
+}
+
+# ------------------------------------------------------------------- --list
+
+if [ "$LIST_ONLY" -eq 1 ]; then
+  if [ ! -f "$MANIFEST" ]; then
+    info "No pack has been laid into $TARGET (no $MANIFEST_NAME)."
+    exit 0
+  fi
+  manifest_json="$(read_manifest)" || exit 1
+  assert_supported_schema "$manifest_json"
+  assert_manifest_paths_ok "$manifest_json"
+  count="$(printf '%s' "$manifest_json" | jq '.packs | length')"
+  if [ "$count" -eq 0 ]; then
+    info "$MANIFEST_NAME is present and records no packs."
+    exit 0
+  fi
+  printf '%s' "$manifest_json" | jq -r '
+    .packs | to_entries[] |
+    "\(.key)\n  packVersion: \(.value.packVersion)\n  packCommit:  \(.value.packCommit)\n  upstream:    \(.value.upstream.repo) @ \(.value.upstream.commit)\n  installed:   \(.value.installedAt)\n  skills:      \(.value.skills | join(", "))\n  files:       \(.value.files | length)"'
+  exit 0
+fi
+
+# ------------------------------------------------------- pack identity rules
+#
+# Pack name and version are interpolated into a release tag and a repository
+# path by the gate that reads the manifest this tool writes. Two packs that
+# produce one tag is the failure these rules exist to stop, and both halves are
+# needed: the version rule alone rejects "bar-v1.0", the name rule alone
+# rejects "foo-vbar". See docs/SPEC.md, "Naming grammar".
+
+valid_pack_name() {
+  printf '%s' "$1" | grep -Eq '^[a-z][a-z0-9]*(-[a-z0-9]+)*$' || return 1
+  printf '%s' "$1" | grep -Eq -- '-v[0-9]' && return 1
+  return 0
+}
+
+valid_pack_version() {
+  printf '%s' "$1" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'
+}
+
+# A skill name becomes a path segment in three places. Anything that could
+# climb out of the destination directory, or collapse two skills onto one
+# path, is refused before it is interpolated anywhere.
+valid_skill_name() {
+  case "$1" in
+    ""|.|..) return 1 ;;
+    */*|*'\'*) return 1 ;;
+  esac
+  printf '%s' "$1" | grep -Eq '^[A-Za-z0-9][A-Za-z0-9._-]*$'
 }
 
 [ -n "$PACK" ] || die "--pack is required. Available: $(ls -1 "$PACKS_ROOT" 2>/dev/null | tr '\n' ' ')"

@@ -55,9 +55,21 @@ new_target() {
 # status with the pipe's, which has hidden real failures in the neighbouring
 # repository more than once.
 run_lay() {  # run_lay <outfile> <args...>
-  local out="$1"; shift
+  local out="$1" rc
+  shift
   "$LAY" "$@" > "$out" 2>&1
-  return $?
+  rc=$?
+  # Bash resolves a function name when the call runs, not when the file is
+  # parsed, so a call sitting above its own definition is not a syntax error.
+  # The name resolves to nothing, the shell says so on stderr, the call is
+  # SKIPPED, and the status is 127, which nothing in the tool reads. A caller
+  # then sees a command that finished cleanly and checked nothing. Every run
+  # in this suite is a detector for that shape, because it costs one line here
+  # and no list of function names could be kept complete.
+  if grep -q 'command not found' "$out"; then
+    fail "a command in the tool resolved to nothing: $(grep -m1 'command not found' "$out")"
+  fi
+  return "$rc"
 }
 
 finish() {

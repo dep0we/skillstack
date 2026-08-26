@@ -9,6 +9,38 @@ text under it.
 
 ## [Unreleased]
 
+- **`--list` validated no manifest path at all, and exited 0 saying so.** The
+  call to `assert_manifest_paths_ok` sat 93 lines above the definition. Bash
+  resolves a function name when the call runs, not when the file is parsed, so
+  this was never a syntax error: the shell printed `command not found` to
+  stderr, SKIPPED the call, and left the status at 127, which nothing in the
+  script reads. `--list` then printed an ordinary listing and exited 0 over a
+  manifest recording `../../../etc/passwd`. Present since `bin/lay-pack.sh` was
+  added on 2026-08-23, so `--list` had never checked a path. The definitions
+  now sit above every call site, and the move is content-identical: sorting
+  both files and diffing them produces nothing.
+- **The suite now catches the class, not this one instance.**
+  `test/functions-are-defined-before-use.test.sh` discovers the function names
+  in every script under `bin/` and `test/` and refuses any name mentioned above
+  its own definition. It discovers those names rather than being handed a list,
+  because a list only ever holds the names somebody remembered, and it proves
+  it can fire on a known-bad file before any clean verdict from it is read.
+  Nothing else catches this: `bash -n` accepts the file, and shellcheck 0.11.0
+  reports nothing at its defaults or at `--enable=all`. Both were measured
+  against the broken file rather than assumed.
+- `run_lay` in `test/helpers.sh` now fails any test whose run leaves
+  `command not found` anywhere in the tool's output. That turns every test file
+  that runs the tool into a detector for the same shape, for one line and no
+  list of names to keep current.
+- `test/refuses-doctored-manifest-paths.test.sh` now puts its five doctored
+  paths through `--list` as well as through a lay-down. Every check in that file
+  passed the whole time the defect existed, because all of them exercised the
+  lay-down path, where the same call sits below the definition and ran.
+- Measured against every `.vendored-skills.json` on the maintainer's machine
+  before merging: the four schema 4 manifests list exactly as they did, and the
+  one schema 1 manifest still exits 1 on the schema check, which runs earlier
+  and was never affected. Validation that has been dead since it was written
+  starts rejecting nothing that currently works.
 - **Adds `bin/lay-pack.sh`, the layering tool.** It copies selected skills from
   the corrected pack committed here into a project repository and records what
   it wrote in a schema 4 `.vendored-skills.json`. It never clones upstream,
@@ -39,11 +71,12 @@ text under it.
   `--forget` exists to dig people out of.
 - Prints a distinct line when a run placed nothing at all, so "finished, wrote
   nothing" cannot read like "finished, everything was already correct".
-- **Adds `test/`, a suite of 13 test files and 122 checks, and `test/run.sh`,
+- **Adds `test/`, a suite of 14 test files and 162 checks, and `test/run.sh`,
   which fails rather than reporting an empty pass when it discovers no tests.**
-  Every guard above was proven by mutation: apply it, show the mutation landed
-  before reading any result, run the test, require it to fail, restore by file
-  copy. 13 of 13 guards proven, with the unmutated control run first.
+  Every guard above was proven by mutation, with the unmutated control run
+  first: apply the mutation, show it landed before reading any result, run the
+  test, require it to fail, restore by file copy. That includes the three
+  controls added when `--list` was found to be validating nothing.
 - **Both superseded scripts now refuse to run**, naming the replacement.
   `vendor-skills.sh` clones upstream's latest default branch and writes a
   schema 1 manifest over a schema 4 one, so leaving it merely discouraged left
