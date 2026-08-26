@@ -25,7 +25,8 @@
 # Exit codes:
 #   0  finished, nothing was skipped
 #   1  usage, environment, or an integrity refusal; nothing was written
-#   2  finished, but one or more files were skipped or left unselected
+#   2  finished, but something needs a decision: files skipped, skills left
+#      unselected, or session state already committed under .superpowers/
 
 set -uo pipefail
 
@@ -47,11 +48,49 @@ MANIFEST_SOURCE="skillstack"
 # documentation. See docs/decisions/2026-08-23-skill-directories-measured.md.
 DEST_DIRS=(".claude/skills" ".agents/skills")
 
+# THE ONE PLACE THE IGNORE RULE IS NAMED.
+#
+# This must equal the rule stated in docs/SPEC.md, "What the tool writes into
+# a project".
+#
+# Skills laid down here write live session state into <project>/.superpowers/
+# at run time. The brainstorming companion server writes a 64-character
+# session key in cleartext to .superpowers/brainstorm/.last-token and embeds
+# the same key in a URL in that session's server-info and server.log;
+# subagent-driven-development writes plan workspaces under .superpowers/sdd/.
+# None of that is pack content, none of it belongs in git, and a commit
+# carrying it publishes a live credential.
+#
+# The pack's own brainstorming/visual-companion.md says to "remind the user to
+# add .superpowers/ to .gitignore if it's not already there". That reminder is
+# what left the hole: measured on 2026-08-25, four project repositories had to
+# fix this by hand after the fact, and the fifth would have been the same
+# conversation again. The tool that copies the skills in is the only party
+# that knows the writes are coming, so it is the party that has to say so.
+#
+# Unanchored and directory-only, both deliberate. Unanchored, so a session
+# started with --project-dir pointing at a subdirectory is covered too.
+# Directory-only, so 'superpowers/notes.md' and 'docs/.superpowers-notes.md'
+# are left alone.
+IGNORE_RULE=".superpowers/"
+
+# The paths that rule has to actually cover. Pinned by name, never by count.
+#
+# They are asked of git, never grepped out of .gitignore, because grepping
+# answers a different question. A rule can be present in the file and undone
+# by a later negation, and a rule can be absent from the file while a parent
+# directory's .gitignore or the repository's own exclude file already covers
+# the path. git check-ignore is the only thing that knows which.
+IGNORE_PROBES=(
+  ".superpowers/brainstorm/.last-token"
+  ".superpowers/sdd/progress.md"
+)
+
 die() { printf 'error: %s\n' "$*" >&2; exit 1; }
 info() { printf '%s\n' "$*"; }
 
 usage() {
-  sed -n '2,30p' "$0" | sed 's/^# \{0,1\}//'
+  sed -n '2,29p' "$0" | sed 's/^# \{0,1\}//'
   exit "${1:-1}"
 }
 
@@ -274,6 +313,115 @@ valid_skill_name() {
   printf '%s' "$1" | grep -Eq '^[A-Za-z0-9][A-Za-z0-9._-]*$'
 }
 
+# ------------------------------------------------------- the ignore rule
+#
+# A laid-down skill writes credentials into the working tree the moment it
+# runs, and the project has no way to know that before it happens. See the
+# IGNORE_RULE block at the top of this file for what writes what.
+#
+# This is the one thing the tool writes into a project that is neither pack
+# content nor the manifest, and it stays outside DEST_DIRS on purpose.
+# DEST_DIRS is the allowed-location list a merge gate applies to manifest
+# paths; adding a third entry to it to hold .gitignore would widen that rule
+# for every path in every project's manifest. Nothing about the ignore rule is
+# recorded in the manifest either. Schema 4 is a contract with a reader in
+# another repository, and the rule needs no record: git check-ignore reports
+# its presence directly, which is a stronger answer than a field the change
+# under review could have written.
+
+# IGNORE_STATE is the one line for the report, set by ensure_ignore_rule
+# below. IGNORE_TRACKED holds committed session state that a new rule
+# cannot untrack. Written as full-line comments and not as trailing ones,
+# because test/functions-are-defined-before-use.test.sh blanks full-line
+# comments before it scans and a trailing comment naming a function above
+# its own definition reads to that scan as a use before definition.
+IGNORE_STATE=""
+IGNORE_TRACKED=()
+
+# path_is_ignored <project-relative path>
+#
+# --no-index, because a path already in the index reports "not ignored"
+# without it. That answer is true of the index and false of the rules, and
+# this function is asked about the rules: an already-committed leak would
+# otherwise make every run append the rule again, forever.
+#
+# check-ignore exits 0 for ignored, 1 for not ignored, and something else when
+# it could not run at all. The third is not the second. Swallowing it would
+# report "no rule covers this" for a repository git could not read, and the
+# run would then append a rule and report a protection it never measured.
+path_is_ignored() {
+  local rc
+  git -C "$TARGET" check-ignore --no-index -q -- "$1"
+  rc=$?
+  case "$rc" in
+    0) return 0 ;;
+    1) return 1 ;;
+    *) die "git check-ignore exited $rc in $TARGET.
+Refusing to guess whether '$1' is ignored, and refusing to write a rule whose effect cannot be measured." ;;
+  esac
+}
+
+# Unconditional, not scoped to whether the selection happens to include the two
+# skills that write there today. A skill name is a proxy for "does this write
+# session state", and the proxy goes stale the first time upstream adds a third
+# writer, silently and in the unsafe direction. The rule costs a project one
+# line and does nothing at all until something writes to that directory.
+#
+# Append the rule when git says the probe paths are not covered, and prove
+# afterwards that they are. Appending, never rewriting: a project's .gitignore
+# is somebody's file, and this tool does not own a line it did not write.
+ensure_ignore_rule() {
+  local gitignore="$TARGET/.gitignore"
+  local p sep unprotected=() unverified=()
+
+  for p in "${IGNORE_PROBES[@]}"; do
+    path_is_ignored "$p" || unprotected+=("$p")
+  done
+
+  # What is already committed is a separate problem with a separate remedy. An
+  # ignore rule does not untrack a tracked file, and the credential is already
+  # in history, so reporting "protected" over the top of it would be the same
+  # false clean result this whole change exists to remove.
+  while IFS= read -r p; do
+    [ -n "$p" ] && IGNORE_TRACKED+=("$p")
+  done < <(git -C "$TARGET" ls-files -- "${IGNORE_RULE%/}" 2>/dev/null)
+
+  if [ "${#unprotected[@]}" -eq 0 ]; then
+    IGNORE_STATE="$IGNORE_RULE already covered by an existing rule"
+    return 0
+  fi
+
+  if [ "$DRY_RUN" -eq 1 ]; then
+    IGNORE_STATE="would append $IGNORE_RULE to .gitignore"
+    return 0
+  fi
+
+  # Separate the block from whatever is above it, and repair a missing final
+  # newline first so the rule cannot land on the end of somebody else's line.
+  sep=""
+  if [ -s "$gitignore" ]; then
+    [ -n "$(tail -c 1 "$gitignore")" ] && sep=$'\n'
+    sep="$sep"$'\n'
+  fi
+
+  {
+    printf '%s' "$sep"
+    printf '# Live session state written by the skills laid down here, added by\n'
+    printf '# bin/lay-pack.sh. The brainstorming companion server writes a session\n'
+    printf '# key in cleartext under this directory and embeds it in a URL in two\n'
+    printf '# more files, so a commit that carries it publishes a live credential.\n'
+    printf '%s\n' "$IGNORE_RULE"
+  } >> "$gitignore" || die "could not append the ignore rule to $gitignore"
+
+  for p in "${IGNORE_PROBES[@]}"; do
+    path_is_ignored "$p" || unverified+=("$p")
+  done
+  [ "${#unverified[@]}" -eq 0 ] || die "appended $IGNORE_RULE to $gitignore and git still does not ignore: ${unverified[*]}
+Something later in that file undoes it. Fix the file by hand before laying this pack down."
+
+  IGNORE_STATE="appended $IGNORE_RULE to .gitignore"
+}
+
 [ -n "$PACK" ] || die "--pack is required. Available: $(ls -1 "$PACKS_ROOT" 2>/dev/null | tr '\n' ' ')"
 valid_pack_name "$PACK" \
   || die "pack name '$PACK' fails the naming grammar (lowercase, digits and single hyphens, and never '-v' followed by a digit)"
@@ -436,6 +584,11 @@ manifest_json="$(read_manifest)" || exit 1
 assert_supported_schema "$manifest_json"
 assert_manifest_paths_ok "$manifest_json"
 
+# Before the first file lands, not after. The window between a skill being on
+# disk and the working tree being ignored is a window in which a session can
+# start and write a key into a directory git is watching.
+ensure_ignore_rule
+
 PREV_FILES="$(printf '%s' "$manifest_json" | jq --arg k "$PACK" '.packs[$k].files // []')"
 PREV_SKILLS="$(printf '%s' "$manifest_json" | jq -r --arg k "$PACK" '.packs[$k].skills // [] | .[]')"
 
@@ -549,6 +702,7 @@ info "${PREFIX}written:   $copied"
 info "${PREFIX}unchanged: $unchanged"
 info "${PREFIX}skipped:   $skipped"
 info "${PREFIX}recorded:  $recorded_total"
+info "${PREFIX}ignored:   $IGNORE_STATE"
 
 # A run that placed nothing must not read like a run that placed something.
 # "Finished, wrote nothing" and "finished, everything was already correct" have
@@ -558,6 +712,14 @@ if [ "$copied" -eq 0 ] && [ "$unchanged" -eq 0 ]; then
   info ""
   info "${PREFIX}NOTHING WAS PLACED. No file was written and none was already in place."
   info "${PREFIX}Every candidate file was skipped, or the selected skills contain no files."
+fi
+
+if [ "${#IGNORE_TRACKED[@]}" -gt 0 ]; then
+  info ""
+  info "ALREADY COMMITTED under ${IGNORE_RULE%/}, and an ignore rule does not untrack a file:"
+  for p in "${IGNORE_TRACKED[@]}"; do info "  $p"; done
+  info "Treat anything these hold as published. Rotate it, remove the files from"
+  info "the branch, and decide separately what to do about the history."
 fi
 
 if [ "${#SKIPPED_PATHS[@]}" -gt 0 ]; then
@@ -587,7 +749,7 @@ fi
 if [ "$DRY_RUN" -eq 1 ]; then
   info ""
   info "Dry run. Nothing was written and $MANIFEST_NAME was not updated."
-  { [ "$skipped" -gt 0 ] || [ "${#UNSELECTED[@]}" -gt 0 ]; } && exit 2
+  { [ "$skipped" -gt 0 ] || [ "${#UNSELECTED[@]}" -gt 0 ] || [ "${#IGNORE_TRACKED[@]}" -gt 0 ]; } && exit 2
   exit 0
 fi
 
@@ -632,5 +794,5 @@ info ""
 info "Recorded $PACK $PACK_VERSION at ${PACK_COMMIT:0:12} in $MANIFEST_NAME."
 info "Commit the skill directories and $MANIFEST_NAME so they reach a cloud agent."
 
-{ [ "$skipped" -gt 0 ] || [ "${#UNSELECTED[@]}" -gt 0 ]; } && exit 2
+{ [ "$skipped" -gt 0 ] || [ "${#UNSELECTED[@]}" -gt 0 ] || [ "${#IGNORE_TRACKED[@]}" -gt 0 ]; } && exit 2
 exit 0

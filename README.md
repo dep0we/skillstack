@@ -41,6 +41,17 @@ laid down is reported and skipped rather than overwritten, and the run exits 2.
 `--forget <skill>` is the one deliberate way past that, and it deletes nothing.
 Nothing this tool does ever deletes a file.
 
+It also appends one ignore rule, `.superpowers/`, to the project's
+`.gitignore`. The skills being copied in write live session state into the
+working tree the moment they run, including a session key in cleartext, and
+laying them down without that rule leaves a project one `git add -A` away from
+committing a live credential. Four repositories had to add the rule by hand
+before this was the tool's job. It is appended, never rewritten, a target that
+already has the rule is left byte-identical, and session state that is
+**already committed** is named in the report rather than papered over, because
+an ignore rule does not untrack a file. See "What the tool writes into a
+project" in `docs/SPEC.md`.
+
 Other flags: `--dry-run` writes nothing at all, and `--list` reports what a
 project already holds.
 
