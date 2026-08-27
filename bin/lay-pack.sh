@@ -14,6 +14,7 @@
 #
 # Usage:
 #   bin/lay-pack.sh --pack <name> --skills a,b,c <project>
+#   bin/lay-pack.sh --pack <name> --skills a,b,c --targets agents <project>
 #   bin/lay-pack.sh --pack <name> --skills a,b,c --dry-run <project>
 #   bin/lay-pack.sh --pack <name> --forget <skill> <project>
 #   bin/lay-pack.sh --list <project>
@@ -36,7 +37,7 @@ MANIFEST_NAME=".vendored-skills.json"
 SCHEMA_VERSION=4
 MANIFEST_SOURCE="skillstack"
 
-# THE ONE PLACE DESTINATION DIRECTORIES ARE NAMED.
+# THE ONE PLACE ALLOWED DESTINATION DIRECTORIES ARE NAMED.
 #
 # This list must equal the allowed-location prefixes in docs/SPEC.md section 4.
 # A path the gate does not allow is not skipped by it: the whole manifest is
@@ -46,7 +47,8 @@ MANIFEST_SOURCE="skillstack"
 #
 # Which directories each reader actually loads was measured, not read from
 # documentation. See docs/decisions/2026-08-23-skill-directories-measured.md.
-DEST_DIRS=(".claude/skills" ".agents/skills")
+ALLOWED_DEST_DIRS=(".claude/skills" ".agents/skills")
+DEST_DIRS=("${ALLOWED_DEST_DIRS[@]}")
 
 # THE ONE PLACE THE IGNORE RULE IS NAMED.
 #
@@ -122,6 +124,7 @@ TARGET=""
 DRY_RUN=0
 FORGET=""
 LIST_ONLY=0
+TARGETS="all"
 SKILLS_GIVEN=0
 
 while [ $# -gt 0 ]; do
@@ -129,6 +132,7 @@ while [ $# -gt 0 ]; do
     --pack)    PACK="${2:-}"; [ -n "$PACK" ] || die "--pack needs a pack name"; shift 2 ;;
     --skills)  SKILLS_ARG="${2:-}"; SKILLS_GIVEN=1
                [ -n "$SKILLS_ARG" ] || die "--skills needs at least one skill name"; shift 2 ;;
+    --targets) TARGETS="${2:-}"; [ -n "$TARGETS" ] || die "--targets needs 'all' or 'agents'"; shift 2 ;;
     --forget)  FORGET="${2:-}"; [ -n "$FORGET" ] || die "--forget needs a skill name"; shift 2 ;;
     --dry-run) DRY_RUN=1; shift ;;
     --list)    LIST_ONLY=1; shift ;;
@@ -142,6 +146,12 @@ done
 
 [ -n "$TARGET" ] || usage 1
 [ -d "$TARGET" ] || die "not a directory: $TARGET"
+
+case "$TARGETS" in
+  all)    DEST_DIRS=("${ALLOWED_DEST_DIRS[@]}") ;;
+  agents) DEST_DIRS=(".agents/skills") ;;
+  *) die "--targets must be 'all' or 'agents', got '$TARGETS'" ;;
+esac
 
 # --list reads and --forget writes. Doing only the read while the caller
 # believes the write happened is the worst of the three outcomes, so refuse.
@@ -224,7 +234,7 @@ assert_paths_allowed() {
       */) die "refusing this manifest: '$p' names a directory, not a file" ;;
     esac
     ok=0
-    for dir in "${DEST_DIRS[@]}"; do
+    for dir in "${ALLOWED_DEST_DIRS[@]}"; do
       case "$p" in
         "$dir"/*/*)
           seg="${p#"$dir"/}"; seg="${seg%%/*}"
@@ -234,7 +244,7 @@ assert_paths_allowed() {
       [ "$ok" -eq 1 ] && break
     done
     [ "$ok" -eq 1 ] \
-      || die "refusing this manifest: '$p' is not <one of ${DEST_DIRS[*]}>/<a recorded skill>/<file>"
+      || die "refusing this manifest: '$p' is not <one of ${ALLOWED_DEST_DIRS[*]}>/<a recorded skill>/<file>"
   done < <(printf '%s' "$json" | jq -r '.[].path')
 }
 
@@ -261,6 +271,11 @@ assert_manifest_paths_ok() {
       < <(printf '%s' "$json" | jq -r --arg k "$k" '.packs[$k].skills // [] | .[]')
     assert_paths_allowed "$files" ${skills[@]+"${skills[@]}"}
   done < <(printf '%s' "$json" | jq -r '.packs // {} | keys[]')
+
+  if [ "$TARGETS" = "agents" ] && printf '%s' "$json" | jq -e \
+    '[.packs[].files[]?.path | select(startswith(".claude/skills/"))] | length > 0' >/dev/null; then
+    die "this project already has a two-directory skill layout. Do not switch it to --targets agents in place because that would leave an unmanaged Claude Code copy. Start a new project with --targets agents or use an explicit migration."
+  fi
 }
 
 # ------------------------------------------------------------------- --list
@@ -552,7 +567,7 @@ if [ "$SKILLS_GIVEN" -eq 0 ]; then
   for s in "${AVAILABLE[@]}"; do info "  $s"; done
   info ""
   info "Name the ones this project needs:"
-  info "  $0 --pack $PACK --skills <a,b,c> $TARGET"
+  info "  $0 --pack $PACK --skills <a,b,c> [--targets all|agents] $TARGET"
   info ""
   info "There is deliberately no way to say 'all of them'. Taking every skill is"
   info "how one project ended up with 165 of its 194 tracked files being skill copies."

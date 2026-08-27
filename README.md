@@ -35,6 +35,10 @@ minimum set covering Claude Code, Codex and Cursor. Which reader loads which
 directory was measured, not read from documentation; see
 `docs/decisions/2026-08-23-skill-directories-measured.md`.
 
+For a Cursor Cloud and Codex-only project, add `--targets agents`. It writes
+only `.agents/skills/`, so the project carries one copy. Local Claude Code
+still reads `CLAUDE.md`, but it does not load those skills in that layout.
+
 The tool records every file it writes, with a hash, in `.vendored-skills.json`
 at the project root. On a later run, a file whose hash has moved since it was
 laid down is reported and skipped rather than overwritten, and the run exits 2.
