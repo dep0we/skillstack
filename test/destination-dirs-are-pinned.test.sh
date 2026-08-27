@@ -9,12 +9,15 @@
 # exclusion off silently for every project.
 source "$(dirname "$0")/helpers.sh"
 
-decl="$(grep -E '^DEST_DIRS=' "$LAY")"
-check_eq "the tool writes exactly these two directories" \
-  'DEST_DIRS=(".claude/skills" ".agents/skills")' "$decl"
+decl="$(grep -E '^ALLOWED_DEST_DIRS=' "$LAY")"
+check_eq "the tool allows exactly these two directories" \
+  'ALLOWED_DEST_DIRS=(".claude/skills" ".agents/skills")' "$decl"
 
-check_eq "and names them in exactly one place" "1" \
-  "$(grep -cE '^DEST_DIRS=' "$LAY")"
+check_eq "and names allowed locations in exactly one place" "1" \
+  "$(grep -cE '^ALLOWED_DEST_DIRS=' "$LAY")"
+
+check "the tool supports the agents-only layout" \
+  grep -q 'agents) DEST_DIRS=(".agents/skills")' "$LAY"
 
 # The specification's allowed locations have to agree, or the manifest this
 # tool writes is one a gate throws away whole.
