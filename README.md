@@ -41,21 +41,25 @@ project ended up with 165 of its 194 tracked files being skill copies.
 
 `--targets both` (the default) writes `.agents/skills/` and `.claude/skills/`,
 the minimum set covering Claude Code, Codex and Cursor. `--targets agents`
-writes `.agents/skills/` only. Which reader loads which directory was measured,
+writes `.agents/skills/` only. A skill whose folder has no licence file gets the
+nearest ancestor's `LICENSE` from the pinned commit copied in, so the upstream
+notice travels with every copy. Which reader loads which directory was measured,
 not read from documentation; see
 `docs/decisions/2026-08-23-skill-directories-measured.md`.
 
 `--rules` keeps a managed block at the top of the project's `AGENTS.md`, between
 `<!-- shared-rules:begin -->` and `<!-- shared-rules:end -->`, and touches
 nothing outside those lines. The text comes from `SHARED_RULES_FILE` (default
-`$SYSTEMS_ROOT/projects/agent-config/working-with-dan.md`). A source that holds a
+`$SYSTEMS_ROOT/projects/agent-config/shared-rules.md`). A source that holds a
 machine path, a credential or an address is refused. Re-running with an
 unchanged source changes nothing. A block edited by hand is reported and skipped.
 
 The tool records every file it writes, with a hash, in `.vendored-skills.json`
 at the project root (schema 5). It still reads the schema 4 files that the old
-pack tool wrote, and upgrades them on the next write without losing a recorded
-hash. On a later run, a file whose hash has moved since it was laid down is
+pack tool wrote. A write run against a schema 4 project stops with exit 1 and
+writes nothing, because a project's own checks may read only the old format;
+`--upgrade-manifest` is the explicit way through, and it keeps every recorded
+hash. `--list` and `--dry-run` still read schema 4. On a later run, a file whose hash has moved since it was laid down is
 reported and skipped rather than overwritten, and the run exits 2.
 `--forget <skill>` is the one deliberate way past that, and it deletes nothing.
 Nothing this tool does ever deletes a file.

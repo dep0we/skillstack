@@ -118,8 +118,9 @@ unreachable source must never read as "no differences".
   `dep0we/skills`.
 - The four projects holding a schema 4 manifest keep validating, because
   `superpowers-v0.1.0` and `packs/superpowers/files.json` stay in this
-  repository. The first time one of them is re-run with the new tool, its
-  manifest becomes schema 5 and its exclusion stops until the gate is updated.
+  repository. A project only becomes schema 5 when someone runs the tool with
+  `--upgrade-manifest`; a plain write run refuses. From then its exclusion stops
+  until the gate is updated.
 
 **What a schema 5 gate would need.** These are the same rules applied to the new
 inputs, not new rules.

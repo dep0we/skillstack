@@ -286,7 +286,7 @@ bin/lay-pack.sh --dry-run ... | --list <project> | --forget <skill> <project>
 ```
 
 - **Source for this release:** the file at `SHARED_RULES_FILE`, default
-  `$SYSTEMS_ROOT/projects/agent-config/working-with-dan.md`. `SYSTEMS_ROOT` is
+  `$SYSTEMS_ROOT/projects/agent-config/shared-rules.md`. `SYSTEMS_ROOT` is
   read from the environment, else from the one `export SYSTEMS_ROOT=` line in
   `~/.config/data-roots.env`. That file is read, never executed. `--rules` alone
   does not need the skills clone.
@@ -327,7 +327,7 @@ bin/lay-pack.sh --dry-run ... | --list <project> | --forget <skill> <project>
   },
   "rules": {
     "file": "AGENTS.md",
-    "source": "$SYSTEMS_ROOT/projects/agent-config/working-with-dan.md",
+    "source": "$SYSTEMS_ROOT/projects/agent-config/shared-rules.md",
     "sourceSha256": "<sha256 of the rules source>",
     "blockSha256": "<sha256 of the block, markers included>",
     "installedAt": "<ISO 8601 timestamp>"
@@ -347,22 +347,36 @@ bin/lay-pack.sh --dry-run ... | --list <project> | --forget <skill> <project>
 - Everything in this file is evidence, never authority, under the trust model in
   section 4. `folder`, `commit` and `source` name no fetch target for a reader.
 
-**Reading a schema 4 manifest.** The tool reads one, lists it (`--list` says it
-is schema 4 and will be upgraded), and keeps detecting hand edits through it.
-The next write upgrades it: each skill becomes its own entry, every recorded path
-and hash is carried over unchanged, and the pack it came from is kept under
-`legacy` (pack name, pack version, pack commit, upstream). A skill with
-`legacy` and no `folder` is tracked but not re-laid. If it is listed in
-`primary-set.txt` it is re-laid from the source and the marker is dropped. If it
-is not listed, it stays recorded, runs report it as not named, and its files are
-left alone. Schema 1 and unknown versions are still refused.
+**Licence notices.** When a laid skill's folder has no licence file of its own
+(`LICENSE`, `LICENSE.md`, `LICENSE.txt`, `COPYING`), the tool copies the nearest
+ancestor folder's licence at the pinned commit into the skill as `LICENSE`, so
+`vendor/<set>/LICENSE` reaches every destination directory. It is recorded in
+`files` with its hash like any other laid file. The walk stops before the
+repository root, and a skill with no ancestor licence gets none.
+
+**Reading a schema 4 manifest.** The tool reads one and lists it (`--list` says
+it is schema 4), and `--dry-run` works over it. **A write run does not rewrite
+it.** Any write run (`--skills`, `--rules`, `--forget`) against a schema 4
+project stops with exit 1, writes nothing, and says the repo was laid by the old
+tool, that its own checks read the old format, and that those checks must be
+upgraded first (a separate change in that repo) before re-running with
+`--upgrade-manifest`. The reason is concrete: one project's setup check reads only
+`manifest.packs`, so a schema 5 rewrite drops its checked files to zero with no
+error, and a default both-directories lay can create a directory that check
+rejects. With `--upgrade-manifest` the write upgrades it: each skill becomes its
+own entry, every recorded path and hash is carried over unchanged, and the pack
+it came from is kept under `legacy` (pack name, pack version, pack commit,
+upstream). A skill with `legacy` and no `folder` is tracked but not re-laid. If
+it is listed in `primary-set.txt` it is re-laid from the source and the marker
+is dropped. If it is not listed, it stays recorded, runs report it as not named,
+and its files are left alone. Schema 1 and unknown versions are still refused.
 
 **What this does to the merge gate in section 4.** Section 4 is the contract for
 schema 4, and nothing in it has been rewritten. A reader that implements only
 schema 4 reports a schema 5 manifest as `unsupported schema — unrecognised`,
 which excludes nothing, so those files get a full review. That is safe and it is
-also a regression: the first time one of the four existing projects is re-run
-with this tool, its vendored files lose their exclusion until the gate learns
+also a regression: a project only becomes schema 5 when someone runs `--upgrade-manifest`,
+and its vendored files lose their exclusion from then until the gate learns
 schema 5. The gate would take the publishing repository (`dep0we/skills`) as a
 constant, the commit from the baseline manifest, the folder from
 `primary-set.txt` at that commit rather than from the manifest, and the hashes

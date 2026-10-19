@@ -28,14 +28,16 @@ text under it.
   refused first.
 - **Manifest is now schema 5.** Records `dep0we/skills`, the source commit, each
   skill's folder and commit, per-file hashes, and the rules entry. Schema 4
-  manifests are read, listed and upgraded on the next write with every recorded
-  hash kept, so hand-edit detection survives. **Gate impact:** a reader that
+  manifests are read and listed. A write run against one stops with exit 1 and
+  writes nothing, because a project's own checks may read only schema 4; the new
+  `--upgrade-manifest` flag is the explicit way through, and keeps every recorded
+  hash so hand-edit detection survives. **Gate impact:** a reader that
   implements only schema 4 reports schema 5 as unrecognised and excludes nothing.
   See the update in `docs/decisions/2026-08-20-gate-asks-skillstack-for-shipped-hashes.md`.
   Decision record: `docs/decisions/2026-10-19-skills-come-from-one-pinned-source.md`.
-- **Known gap:** vendored skill folders in `dep0we/skills` carry no licence file,
-  so the upstream copyright notice no longer travels into projects. Tracked in the
-  decision record.
+- **Licence notices travel.** A laid skill whose folder has no licence file gets
+  the nearest ancestor `LICENSE` from the pinned commit copied in and recorded.
+- **Default rules source** is `$SYSTEMS_ROOT/projects/agent-config/shared-rules.md`.
 
 - **`lay-pack.sh` now appends `.superpowers/` to the target's `.gitignore`.**
   The skills it copies in write live session state into the working tree the

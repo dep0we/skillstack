@@ -56,9 +56,39 @@ check "--list wrote nothing" cmp -s "$m" "$m.v4copy"
 run_lay "$out" --skills "executing-plans,brainstorming,old-only" --dry-run "$t"
 check "a dry run leaves a schema 4 manifest untouched" cmp -s "$m" "$m.v4copy"
 
+# ------------------------- a write run never rewrites schema 4 on its own
+#
+# The project's own checks read the old format. A silent rewrite makes them see
+# no files. Every write path refuses, writes nothing, and names the way through.
+snapshot() { find "$t" -path "$t/.git" -prune -o -type f -print | sort | xargs shasum -a 256 | shasum -a 256 | awk '{print $1}'; }
+rules_src="$FIXTURE_DIR/rules.md"
+printf '# Rules\n\nPlain.\n' > "$rules_src"
+before_snap="$(snapshot)"
+for args in \
+  "--skills executing-plans" \
+  "--skills executing-plans,brainstorming --targets both" \
+  "--skills writing-plans --rules" \
+  "--rules" \
+  "--forget executing-plans"
+do
+  # shellcheck disable=SC2086  # the word splitting is the point
+  SHARED_RULES_FILE="$rules_src" run_lay "$out" $args "$t"
+  check_eq "'$args' over schema 4 exits 1" 1 "$?"
+  check "'$args' says the repo was laid by the old tool" grep -q "laid by the old pack tool" "$out"
+  check "'$args' names --upgrade-manifest" grep -q -- "--upgrade-manifest" "$out"
+  check_eq "'$args' wrote nothing at all" "$before_snap" "$(snapshot)"
+done
+check "the manifest is still schema 4, byte for byte" cmp -s "$m" "$m.v4copy"
+check "no AGENTS.md appeared" test ! -f "$t/AGENTS.md"
+SHARED_RULES_FILE="$rules_src" run_lay "$out" --rules --upgrade-manifest "$t"
+check_eq "--rules with --upgrade-manifest goes through" 0 "$?"
+check_eq "and writes schema 5" "5" "$(jq -r '.schemaVersion' "$m")"
+rm -f "$t/AGENTS.md"
+cp "$m.v4copy" "$m"
+
 # ------------------------------------------- a hand edit is still caught
 printf '\nEDITED UNDER THE OLD TOOL\n' >> "$t/.claude/skills/executing-plans/SKILL.md"
-run_lay "$out" --skills "executing-plans,brainstorming" "$t"
+run_lay "$out" --upgrade-manifest --skills "executing-plans,brainstorming" "$t"
 check_eq "an edit made under schema 4 still exits 2" 2 "$?"
 check "and is reported" grep -q "edited since it was laid down" "$out"
 check "the edit survived" grep -q "EDITED UNDER THE OLD TOOL" "$t/.claude/skills/executing-plans/SKILL.md"
@@ -93,7 +123,7 @@ check_eq "and no legacy marker" "false" "$(jq '.skills["executing-plans"] | has(
 
 # ------------------------------------- --forget upgrades a schema 4 file too
 cp "$m.v4copy" "$m"
-run_lay "$out" --forget brainstorming "$t"
+run_lay "$out" --upgrade-manifest --forget brainstorming "$t"
 check_eq "--forget on a schema 4 manifest exits 0" 0 "$?"
 check_eq "and writes schema 5" "5" "$(jq -r '.schemaVersion' "$m")"
 
@@ -104,7 +134,7 @@ jq '.packs.superpowers.files += [{path:"../../etc/passwd", sha256:"0000000000000
 run_lay "$out" --list "$t"
 check_eq "--list refuses a doctored schema 4 manifest" 1 "$?"
 check "names the path" grep -Fq "../../etc/passwd" "$out"
-run_lay "$out" --skills "executing-plans" "$t"
+run_lay "$out" --upgrade-manifest --skills "executing-plans" "$t"
 check_eq "a lay-down refuses it too" 1 "$?"
 
 # Schema 1 and unknown versions are still refused outright.

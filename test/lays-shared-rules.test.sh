@@ -8,7 +8,7 @@ source "$(dirname "$0")/helpers.sh"
 BEGIN='<!-- shared-rules:begin -->'
 END='<!-- shared-rules:end -->'
 
-rules="$FIXTURE_DIR/working-with-dan.md"
+rules="$FIXTURE_DIR/shared-rules.md"
 printf '# Working rules\n\nAnswer first. Plain words.\n' > "$rules"
 export SHARED_RULES_FILE="$rules"
 
@@ -200,5 +200,18 @@ run_lay "$out" --rules "$tp"
 check_eq "refuses an empty rules source" 1 "$?"
 rm -rf "$tp"
 
-rm -rf "$t" "$t2" "$t3" "$t4" "$t5" "$t6" "$out"
+# ------------------------------------------------ the default source
+mkdir -p "$FIXTURE_DIR/sysroot/projects/agent-config"
+printf '# Shared rules\n\nDefault source.\n' > "$FIXTURE_DIR/sysroot/projects/agent-config/shared-rules.md"
+printf '# Personal\n\nMust never be laid.\n' > "$FIXTURE_DIR/sysroot/projects/agent-config/working-with-dan.md"
+t7="$(new_target)" || exit 1
+env -u SHARED_RULES_FILE SYSTEMS_ROOT="$FIXTURE_DIR/sysroot" "$LAY" --rules "$t7" > "$out" 2>&1
+check_eq "the default source is found under SYSTEMS_ROOT" 0 "$?"
+check "it is shared-rules.md" grep -q "Default source." "$t7/AGENTS.md"
+check_fails "never the personal file" grep -q "Must never be laid" "$t7/AGENTS.md"
+check_eq "the manifest label names shared-rules.md" '$SYSTEMS_ROOT/projects/agent-config/shared-rules.md' \
+  "$(jq -r '.rules.source' "$t7/.vendored-skills.json")"
+check_fails "the tool never names the personal file" grep -q "working-with-dan" "$LAY"
+
+rm -rf "$t" "$t2" "$t3" "$t4" "$t5" "$t6" "$t7" "$out"
 finish

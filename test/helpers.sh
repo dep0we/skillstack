@@ -121,7 +121,8 @@ printf '%s\n' \
   'skills/executing-plans' \
   'vendor/superpowers/brainstorming' \
   'vendor/superpowers/subagent-driven-development' \
-  'carried/writing-plans' > "$FIXTURE_REPO/primary-set.txt"
+  'carried/writing-plans' \
+  'vendor/withlicence/own-licensed' > "$FIXTURE_REPO/primary-set.txt"
 fixture_file skills/executing-plans/SKILL.md "executing-plans COMMIT ONE"
 fixture_file skills/executing-plans/scripts/run.sh "#!/bin/sh"
 chmod +x "$FIXTURE_REPO/skills/executing-plans/scripts/run.sh"
@@ -129,6 +130,10 @@ fixture_file vendor/superpowers/brainstorming/SKILL.md "brainstorming COMMIT ONE
 fixture_file vendor/superpowers/brainstorming/visual-companion.md "companion notes"
 fixture_file vendor/superpowers/subagent-driven-development/SKILL.md "sdd COMMIT ONE"
 fixture_file carried/writing-plans/SKILL.md "writing-plans COMMIT ONE"
+fixture_file vendor/superpowers/LICENSE "MIT notice for the superpowers set"
+fixture_file vendor/withlicence/LICENSE "ancestor notice that must lose"
+fixture_file vendor/withlicence/own-licensed/SKILL.md "own-licensed COMMIT ONE"
+fixture_file vendor/withlicence/own-licensed/LICENSE "the skill's own notice"
 fixture_file skills/hidden/SKILL.md "a folder primary-set.txt does not list"
 git -C "$FIXTURE_REPO" add -A
 git -C "$FIXTURE_REPO" commit --quiet -m "fixture one"

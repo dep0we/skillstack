@@ -45,9 +45,20 @@ carry a skill from `packs/` while his machines run a different one from
   the repository, marked superseded (`packs/README.md`), because schema 4
   manifests and the schema 4 gate contract refer to it.
 - **The manifest is schema 5.** No pack concept. Each skill records its source
-  folder and commit, each file its hash. Schema 4 manifests are read, listed and
-  upgraded on the next write with every recorded hash kept, so hand-edit
-  detection survives the upgrade.
+  folder and commit, each file its hash. Schema 4 manifests are read and listed,
+  and upgraded only on request (see the next item), with every recorded hash kept
+  so hand-edit detection survives the upgrade.
+- **A write run never rewrites a schema 4 manifest by itself.** A project's own
+  setup check can read only the schema 4 shape (headwaters'
+  `scripts/verify-setup.mjs` reads only `manifest.packs`). After a schema 5
+  rewrite it would see 0 checked files instead of 23, without any error, and a
+  default `--targets both` lay can create `.claude/skills`, which that check
+  rejects. So any write run (`--skills`, `--rules`, `--forget`) against a schema 4
+  project stops with exit 1, writes nothing, and says the repo was laid by the old
+  tool and its checks must be taught schema 5 first, in a separate change in that
+  repo. `--upgrade-manifest` is the one explicit way through. `--list` and
+  `--dry-run` still read schema 4. Tested in
+  `test/reads-and-upgrades-schema-4.test.sh`.
 - **`--rules` is added** in the same change, because the same projects need the
   shared working rules in `AGENTS.md`, and the same drift argument applies. It
   writes a marked block and nothing else. Its source for this release is a file
@@ -62,14 +73,16 @@ carry a skill from `packs/` while his machines run a different one from
   schema 4 will report schema 5 as unrecognised and exclude nothing. That is
   safe, and it is a loss: files that were excluded from adversarial review get
   full review again, from the moment a project is re-run with this tool.
-- **The licence notice no longer travels in the copy.** The old pack carried
-  `THIRD-PARTY-NOTICES.md` with the upstream copyright notice, because the
-  licence requires it to accompany a copy. In `dep0we/skills` the licence files
-  sit at `vendor/<set>/LICENSE`, outside the skill folders, and the tool copies
-  only what is inside a listed folder, into directories the manifest rules
-  allow. Projects laid by this tool therefore do not receive the notice. The fix
-  belongs in `dep0we/skills` (a licence file inside each vendored skill folder),
-  not in a special case here. Open until the maintainer decides.
+- **The licence notice is handled in the tool.** The old pack carried
+  `THIRD-PARTY-NOTICES.md`, because the licence requires the upstream notice to
+  accompany a copy. In `dep0we/skills` the notice sits above the skill folders
+  (`vendor/<set>/LICENSE`). So when a laid skill's folder has no licence file of
+  its own, the tool copies the nearest ancestor's `LICENSE` at the pinned commit
+  into the skill as `LICENSE`, in every destination directory, and records it
+  with its hash like any other laid file (so a hand edit to it is caught too).
+  The walk stops before the repository root. A skill with no ancestor licence
+  (the maintainer's own) gets none. A folder that has its own licence keeps it.
+  Tested in `test/licence-notice-travels.test.sh`.
 - **Skills outside the new source cannot be re-laid.** Pack skills that were
   never carried into `dep0we/skills` (for example `brainstorming`) stay tracked
   in an upgraded manifest and are reported on every run until they are named or
@@ -88,6 +101,9 @@ carry a skill from `packs/` while his machines run a different one from
 
 ## Not decided here
 
-- Where the rules text finally lives. `SHARED_RULES_FILE` is a stopgap that
-  points at one file on one machine.
+- Where the rules text finally lives. For this release the default source is
+  `$SYSTEMS_ROOT/projects/agent-config/shared-rules.md`, the repo-safe rules with
+  the personal context split out. The tool never defaults to the personal file.
+  The source moves to claude-config `user/shared-rules.md` when that lands, and
+  `SHARED_RULES_FILE` is a stopgap until then.
 - The gate update. Written down in the gate decision record, not built.

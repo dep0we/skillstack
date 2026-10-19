@@ -18,6 +18,7 @@
 #   bin/lay-pack.sh --rules <project>
 #   bin/lay-pack.sh --skills a,b,c --dry-run <project>
 #   bin/lay-pack.sh --forget <skill> <project>
+#   bin/lay-pack.sh --upgrade-manifest ... <project>   (schema 4 projects only)
 #   bin/lay-pack.sh --list <project>
 #
 # --skills is required to lay skills and has no "all". Taking every skill is how
@@ -28,13 +29,15 @@
 # --rules writes the shared rules into a managed block at the top of the
 #   project's AGENTS.md, between <!-- shared-rules:begin --> and
 #   <!-- shared-rules:end -->. Nothing outside those lines is touched.
+# --upgrade-manifest lets a write run rewrite a schema 4 manifest as schema 5.
+#   Without it, a write run against a schema 4 project stops, writing nothing.
 # --pack is retired. Packs are replaced by the pinned dep0we/skills source.
 #
 # Environment:
 #   SKILLS_REPO         clone of dep0we/skills (default ~/Projects/skills)
 #   SKILLS_LOCK_FILE    pin file (default source.lock beside this script's repo)
 #   SHARED_RULES_FILE   rules source (default
-#                       $SYSTEMS_ROOT/projects/agent-config/working-with-dan.md)
+#                       $SYSTEMS_ROOT/projects/agent-config/shared-rules.md)
 #
 # Exit codes:
 #   0  finished, nothing was skipped
@@ -68,7 +71,7 @@ DEST_DIRS=(".claude/skills" ".agents/skills")
 RULES_BEGIN="<!-- shared-rules:begin -->"
 RULES_END="<!-- shared-rules:end -->"
 RULES_TARGET_NAME="AGENTS.md"
-RULES_DEFAULT_REL="projects/agent-config/working-with-dan.md"
+RULES_DEFAULT_REL="projects/agent-config/shared-rules.md"
 
 # THE ONE PLACE THE IGNORE RULE IS NAMED.
 #
@@ -130,7 +133,7 @@ die() { printf 'error: %s\n' "$*" >&2; exit 1; }
 info() { printf '%s\n' "$*"; }
 
 usage() {
-  sed -n '2,44p' "$0" | sed 's/^# \{0,1\}//'
+  sed -n '2,47p' "$0" | sed 's/^# \{0,1\}//'
   exit "${1:-1}"
 }
 
@@ -162,6 +165,7 @@ FORGET=""
 LIST_ONLY=0
 SKILLS_GIVEN=0
 RULES_GIVEN=0
+UPGRADE_MANIFEST=0
 TARGETS_MODE="both"
 
 while [ $# -gt 0 ]; do
@@ -179,6 +183,7 @@ while [ $# -gt 0 ]; do
     --forget)  FORGET="${2:-}"; [ -n "$FORGET" ] || die "--forget needs a skill name"; shift 2 ;;
     --dry-run) DRY_RUN=1; shift ;;
     --list)    LIST_ONLY=1; shift ;;
+    --upgrade-manifest) UPGRADE_MANIFEST=1; shift ;;
     -h|--help) usage 0 ;;
     -*)        die "unknown option: $1 (try --help)" ;;
     *)
@@ -388,6 +393,24 @@ assert_manifest_paths_ok() {
   fi
 }
 
+# require_upgrade_flag <manifest json, as read from disk>
+#
+# A schema 4 manifest is read by checks inside the project itself (a project's
+# own setup verifier reads only .packs). Rewriting it to schema 5 makes those
+# checks see no files, with no error, and a both-directories lay can create a
+# directory they reject. So a write run never upgrades one on its own. Reads
+# (--list, --dry-run) are fine. --upgrade-manifest is the one way through, after
+# the project's own checks have been taught schema 5.
+require_upgrade_flag() {
+  [ "$DRY_RUN" -eq 1 ] && return 0
+  [ "$UPGRADE_MANIFEST" -eq 1 ] && return 0
+  [ "$(printf '%s' "$1" | jq -r '.schemaVersion // "none"')" = "4" ] || return 0
+  die "$MANIFEST_NAME in this project was laid by the old pack tool (schema 4), and nothing was written.
+The project's own checks read that old format. Rewriting it to schema $SCHEMA_VERSION would make them
+see no skill files, without any error. Upgrade the project's checks first (a separate change in that
+project), then run this again with --upgrade-manifest. --list and --dry-run still read it."
+}
+
 # ------------------------------------------------------------------- --list
 
 if [ "$LIST_ONLY" -eq 1 ]; then
@@ -539,6 +562,7 @@ if [ -n "$FORGET" ]; then
   raw_json="$(read_manifest)" || exit 1
   assert_supported_schema "$raw_json"
   assert_manifest_paths_ok "$raw_json"
+  require_upgrade_flag "$raw_json"
   manifest_json="$(upgrade_manifest "$raw_json")"
 
   # "Give up my edits to this skill, take the source's version next run."
@@ -680,6 +704,36 @@ folder_of() {
   return 1
 }
 
+# stage_licence <name> <folder>
+#
+# A vendored skill's licence sits above its folder (vendor/<set>/LICENSE), and
+# the licence requires the notice to travel with every copy. When the folder has
+# no licence file of its own, the nearest ancestor's is staged as LICENSE inside
+# the skill, so it is laid and recorded like any other file. The walk stops
+# before the repository root: a root file would be the repository's own terms,
+# not a third party's notice. A skill with no ancestor licence (the
+# maintainer's own) gets none.
+stage_licence() {
+  local name="$1" dir="$2" cand f
+  for f in LICENSE LICENSE.md LICENSE.txt COPYING; do
+    [ -e "$STAGE/$name/$f" ] && return 0
+  done
+  dir="$(dirname "$dir")"
+  while [ "$dir" != "." ] && [ "$dir" != "/" ]; do
+    for f in LICENSE LICENSE.md LICENSE.txt COPYING; do
+      cand="$dir/$f"
+      if git -C "$SKILLS_REPO" cat-file -e "$PIN:$cand" 2>/dev/null; then
+        [ "$(git -C "$SKILLS_REPO" cat-file -t "$PIN:$cand")" = "blob" ] || continue
+        git -C "$SKILLS_REPO" cat-file blob "$PIN:$cand" > "$STAGE/$name/LICENSE" \
+          || die "could not read $cand from commit ${PIN:0:12}"
+        return 0
+      fi
+    done
+    dir="$(dirname "$dir")"
+  done
+  return 0
+}
+
 # stage_skill <name> <folder>
 #
 # Copies every file of the folder, as it is recorded in the pinned commit, into
@@ -705,6 +759,7 @@ stage_skill() {
     n=$((n+1))
   done < <(git -C "$SKILLS_REPO" ls-tree -r -z "$PIN" -- "$folder")
   [ "$n" -gt 0 ] || die "folder '$folder' has no files at commit ${PIN:0:12} of $SOURCE_REPO"
+  stage_licence "$name" "$folder"
 }
 
 # ------------------------------------------------------- the shared rules
@@ -931,6 +986,7 @@ fi
 raw_json="$(read_manifest)" || exit 1
 assert_supported_schema "$raw_json"
 assert_manifest_paths_ok "$raw_json"
+require_upgrade_flag "$raw_json"
 manifest_json="$(upgrade_manifest "$raw_json")"
 
 if [ "$RULES_GIVEN" -eq 1 ]; then
