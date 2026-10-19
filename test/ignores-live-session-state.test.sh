@@ -41,7 +41,7 @@ out="$(new_out)"
 check_fails "before the run, git does not ignore the token path" \
   ignored_by_rule "$t" ".superpowers/brainstorm/.last-token"
 
-run_lay "$out" --pack "$PACK" --skills "brainstorming,subagent-driven-development" "$t"
+run_lay "$out" --skills "brainstorming,subagent-driven-development" "$t"
 check_eq "a clean lay-down still exits 0" 0 "$?"
 check "reports what it did about the rule" grep -qE '^ignored:   appended' "$out"
 check "created a .gitignore" test -f "$t/.gitignore"
@@ -76,7 +76,7 @@ check_fails "the skills the tool just laid down are untouched" \
 # ----------------------------------------------------------- idempotence
 
 before="$(shasum -a 256 "$t/.gitignore" | awk '{print $1}')"
-run_lay "$out" --pack "$PACK" --skills "brainstorming,subagent-driven-development" "$t"
+run_lay "$out" --skills "brainstorming,subagent-driven-development" "$t"
 check_eq "a second run exits 0" 0 "$?"
 after="$(shasum -a 256 "$t/.gitignore" | awk '{print $1}')"
 check_eq "a second run leaves .gitignore byte-identical" "$before" "$after"
@@ -112,7 +112,7 @@ git -C "$t2" add -A >/dev/null 2>&1
 git -C "$t2" commit --quiet -m gitignore
 pre="$(shasum -a 256 "$t2/.gitignore" | awk '{print $1}')"
 
-run_lay "$out" --pack "$PACK" --skills "brainstorming" "$t2"
+run_lay "$out" --skills "brainstorming" "$t2"
 check_eq "exits 0 against a target that already had the rule" 0 "$?"
 check_eq "and its .gitignore is byte-identical" "$pre" \
   "$(shasum -a 256 "$t2/.gitignore" | awk '{print $1}')"
@@ -127,7 +127,7 @@ printf '# mine\nnode_modules/\ndist/' > "$t3/.gitignore"   # no trailing newline
 git -C "$t3" add -A >/dev/null 2>&1
 git -C "$t3" commit --quiet -m gitignore
 
-run_lay "$out" --pack "$PACK" --skills "brainstorming" "$t3"
+run_lay "$out" --skills "brainstorming" "$t3"
 check_eq "exits 0 against a file with no final newline" 0 "$?"
 check "the original first line survives" grep -qxF '# mine' "$t3/.gitignore"
 check "the original last line survives whole" grep -qxF 'dist/' "$t3/.gitignore"
@@ -146,7 +146,7 @@ openssl rand -hex 32 > "$t4/.superpowers/brainstorm/.last-token"
 git -C "$t4" add -A >/dev/null 2>&1
 git -C "$t4" commit --quiet -m "committed a session key"
 
-run_lay "$out" --pack "$PACK" --skills "brainstorming" "$t4"
+run_lay "$out" --skills "brainstorming" "$t4"
 check_eq "a run that finds committed session state exits 2" 2 "$?"
 check "and says it is already committed" grep -q "ALREADY COMMITTED" "$out"
 check "and names the file" grep -qF ".superpowers/brainstorm/.last-token" "$out"
@@ -156,7 +156,7 @@ check "the rule is still added for what is not yet tracked" \
 # --------------------------------------------------- a dry run writes nothing
 
 t5="$(new_target)" || exit 1
-run_lay "$out" --pack "$PACK" --skills "brainstorming" --dry-run "$t5"
+run_lay "$out" --skills "brainstorming" --dry-run "$t5"
 check_eq "dry run exits 0" 0 "$?"
 check "wrote no .gitignore" test ! -f "$t5/.gitignore"
 check "and says what it would have done" grep -qE '^\[dry-run\] ignored:   would append' "$out"

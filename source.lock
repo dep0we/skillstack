@@ -1,0 +1,5 @@
+# The one pinned source for every skill this tool lays: the dep0we/skills
+# repository at the commit below. Dan's machines install from the same commit.
+# This pin moves to claude-config's skills.lock once that file exists, and this
+# file is deleted then.
+69985ce8b5671eadaaa3d27790b65b35d14016cf
