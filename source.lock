@@ -2,4 +2,4 @@
 # repository at the commit below. Dan's machines install from the same commit.
 # This pin moves to claude-config's skills.lock once that file exists, and this
 # file is deleted then.
-18e8ecb9662100c6529664a44410fcb1bb36a71d
+0eff8e7ca5a34de716ae7dea0d8dff6f3d55d8d0
