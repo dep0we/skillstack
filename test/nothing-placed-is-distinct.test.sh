@@ -9,18 +9,18 @@ t="$(new_target)" || exit 1
 placed="$(new_out)"
 nothing="$(new_out)"
 
-run_lay "$placed" --pack "$PACK" --skills "executing-plans" "$t"
+run_lay "$placed" --skills "writing-plans" "$t"
 check_eq "a real lay-down exits 0" 0 "$?"
 check_fails "and does NOT claim nothing was placed" grep -q "NOTHING WAS PLACED" "$placed"
 
 # Now make every candidate file unwritable-by-policy: present on disk and
 # unrecorded, so all of them are skipped and none is written.
 t2="$(new_target)" || exit 1
-mkdir -p "$t2/.claude/skills/executing-plans" "$t2/.agents/skills/executing-plans"
-printf 'mine\n' > "$t2/.claude/skills/executing-plans/SKILL.md"
-printf 'mine\n' > "$t2/.agents/skills/executing-plans/SKILL.md"
+mkdir -p "$t2/.claude/skills/writing-plans" "$t2/.agents/skills/writing-plans"
+printf 'mine\n' > "$t2/.claude/skills/writing-plans/SKILL.md"
+printf 'mine\n' > "$t2/.agents/skills/writing-plans/SKILL.md"
 
-run_lay "$nothing" --pack "$PACK" --skills "executing-plans" "$t2"
+run_lay "$nothing" --skills "writing-plans" "$t2"
 check_eq "a run that placed nothing exits 2" 2 "$?"
 check "and says so in its own words" grep -q "NOTHING WAS PLACED" "$nothing"
 check "written count is zero" grep -qE '^written:   0$' "$nothing"

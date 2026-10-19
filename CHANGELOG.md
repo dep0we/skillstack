@@ -9,6 +9,36 @@ text under it.
 
 ## [Unreleased]
 
+- **`lay-pack.sh` now lays skills only from `dep0we/skills`, at the commit in
+  the new `source.lock`.** Dan's machines install from that one pinned source,
+  and a project copy taken from `packs/` would drift from it. The tool reads a
+  clone at `SKILLS_REPO` (default `~/Projects/skills`), resolves names against
+  `primary-set.txt` at the pinned commit (last path segment of a listed folder,
+  unlisted names refused), and copies the files out of that commit with git, never
+  from the clone's working tree. A pinned commit missing from the clone stops
+  the run with the fetch command to run; the tool never fetches. New command
+  line: `--skills a,b,c [--rules] [--targets agents|both]`, plus `--rules` alone.
+  `--targets both` is the default and keeps the old two directories. `--pack` is
+  retired and says so. `packs/` stays, marked superseded.
+- **New `--rules`.** Writes a managed block at the top of the project's
+  `AGENTS.md` between `<!-- shared-rules:begin -->` and `<!-- shared-rules:end -->`,
+  from `SHARED_RULES_FILE`. Re-running is a no-op, a hand-edited block is reported
+  and skipped with exit 2, and nothing outside the markers is touched. A source
+  holding a machine path, credential, email, IP address or private hostname is
+  refused first.
+- **Manifest is now schema 5.** Records `dep0we/skills`, the source commit, each
+  skill's folder and commit, per-file hashes, and the rules entry. Schema 4
+  manifests are read and listed. A write run against one stops with exit 1 and
+  writes nothing, because a project's own checks may read only schema 4; the new
+  `--upgrade-manifest` flag is the explicit way through, and keeps every recorded
+  hash so hand-edit detection survives. **Gate impact:** a reader that
+  implements only schema 4 reports schema 5 as unrecognised and excludes nothing.
+  See the update in `docs/decisions/2026-08-20-gate-asks-skillstack-for-shipped-hashes.md`.
+  Decision record: `docs/decisions/2026-10-19-skills-come-from-one-pinned-source.md`.
+- **Licence notices travel.** A laid skill whose folder has no licence file gets
+  the nearest ancestor `LICENSE` from the pinned commit copied in and recorded.
+- **Default rules source** is `$SYSTEMS_ROOT/projects/agent-config/shared-rules.md`.
+
 - **`lay-pack.sh` now appends `.superpowers/` to the target's `.gitignore`.**
   The skills it copies in write live session state into the working tree the
   moment they run: the brainstorming companion server writes a 64-character

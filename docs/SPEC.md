@@ -1,12 +1,15 @@
 # skillstack: spec
 
-**Status:** the corrected pack is built and merged, and **the layering tool is
-built**: `bin/lay-pack.sh`, with a test suite in `test/`. Section 4 is a settled
-contract between this repository and the guardrail toolkit that reads the
-manifest. The **writing** side of that contract now exists; the **reading**
-side, the merge gate itself, is specified here and not built. The two
-carried-forward scripts in `bin/` are still present as references and now
-refuse to run.
+**Status (2026-10-19):** the layering tool is built (`bin/lay-pack.sh`, tests
+in `test/`), and it no longer lays from `packs/`. Skills now come from one
+pinned source, the `dep0we/skills` repository at the commit in `source.lock`,
+and the manifest it writes is schema 5. Section 3a describes that, and the
+decision is in `docs/decisions/2026-10-19-skills-come-from-one-pinned-source.md`.
+Sections 2 and 4 below still describe packs and the schema 4 contract. They are
+kept because four projects hold a schema 4 manifest and because the merge gate
+that reads the manifest has not been told about schema 5; the gate section of
+4 says what that means. The merge gate itself is specified here and not built.
+The two carried-forward scripts in `bin/` still refuse to run.
 
 ## 1. The problem this solves
 
@@ -154,14 +157,16 @@ in the tool assumes that step exists.
 
 ### What the tool writes into a project
 
-Exactly three things, and nothing else:
+Exactly four things, and nothing else:
 
-1. **Pack files**, under the allowed destination directories named in section
+1. **Skill files**, under the allowed destination directories named in section
    4. This is the only category a merge gate ever reads, and the only one
    recorded in `files`.
 2. **`.vendored-skills.json`** at the project root.
 3. **One ignore rule, `.superpowers/`, appended to the project's
-   `.gitignore`.**
+   `.gitignore`.** Only when skills are laid.
+4. **One managed block in `AGENTS.md`**, only when `--rules` is passed. See
+   section 3a. Everything outside its two marker lines is left alone.
 
 The third exists because the skills being copied in write live session state
 into the working tree the moment they run, and the project has no way to know
@@ -223,7 +228,170 @@ about a copied, archived or snapshotted working directory, which is exactly
 what a cloud agent's working directory is. That is upstream behaviour and it is
 not corrected here.
 
+## 3a. Where skills come from now, and the schema 5 manifest
+
+**Added 2026-10-19.** Dan's machines install skills from one pinned source, the
+`dep0we/skills` repository. A copy laid into a project has to come from the same
+place, or the two drift. So `bin/lay-pack.sh` no longer reads `packs/`. The
+reasoning and the alternatives are in
+`docs/decisions/2026-10-19-skills-come-from-one-pinned-source.md`.
+
+### Command line
+
+```
+bin/lay-pack.sh --skills a,b,c [--rules] [--targets agents|both] <project>
+bin/lay-pack.sh --rules <project>
+bin/lay-pack.sh --dry-run ... | --list <project> | --forget <skill> <project>
+```
+
+- `--skills` names the full set to keep current. There is still no "all".
+- `--targets both` is the default and writes `.agents/skills` and
+  `.claude/skills`, the two directories measured to cover every reader.
+  `--targets agents` writes `.agents/skills` only. Entries a skill already has
+  in the directory not targeted are carried forward in the manifest untouched,
+  and files there are not examined, overwritten or flagged by that run.
+- `--pack` is retired. Passing it stops the run with a message saying so.
+- Exit codes are unchanged: 0 finished, 1 refusal with nothing written, 2
+  finished but something needs a decision.
+
+### The source
+
+- **The pin** is `source.lock` at this repository's root: one full commit hash,
+  and comment lines. A comment says the pin moves to claude-config's
+  `skills.lock` once that exists. `SKILLS_LOCK_FILE` overrides the path, for
+  tests.
+- **The clone** is at `SKILLS_REPO`, default `~/Projects/skills`. If the pinned
+  commit is not in it, the run stops and prints the `git -C <path> fetch` to
+  run. The tool never fetches and never moves the clone.
+- **Names** resolve against `primary-set.txt` at the pinned commit. A name is
+  the last path segment of a listed folder. A name not listed is refused even if
+  a folder with that name exists in the repository. Two listed folders with one
+  name stop the run.
+- **Bytes** are read from the commit with `git ls-tree` and `git cat-file`,
+  never from the clone's working tree and with no filters. A symlink or a
+  submodule entry inside a skill folder stops the run. The executable bit is
+  kept.
+- Nothing is corrected at lay-down time. Corrections live in the source.
+
+### The shared rules block
+
+`--rules` writes one managed block at the top of the project's `AGENTS.md`
+(created if absent):
+
+```
+<!-- shared-rules:begin -->
+<!-- Managed by skillstack bin/lay-pack.sh --rules. Edit the source, not this block. -->
+...the contents of the rules source...
+<!-- shared-rules:end -->
+```
+
+- **Source for this release:** the file at `SHARED_RULES_FILE`, default
+  `$SYSTEMS_ROOT/projects/agent-config/shared-rules.md`. `SYSTEMS_ROOT` is
+  read from the environment, else from the one `export SYSTEMS_ROOT=` line in
+  `~/.config/data-roots.env`. That file is read, never executed. `--rules` alone
+  does not need the skills clone.
+- **Refused before anything is written:** a source holding an absolute machine
+  path, a sync-folder path, a Windows path, a credential or token shape, a
+  private key block, an email address, an IP address, a private hostname or a
+  40-character hex string. The report gives the kind and the line number, never
+  the matching text. A source that itself contains the markers is refused.
+- **Re-running** with an unchanged source leaves `AGENTS.md` byte-identical, and
+  the manifest too.
+- **A changed source** replaces the block in place. Lines outside the markers
+  are never read for meaning and never changed, including a missing final
+  newline.
+- **A hand-edited block** (its hash differs from the manifest's) is reported and
+  skipped, and the run exits 2. So is a block the manifest has no record of.
+  The way to take the shared version back is to delete the block, markers
+  included, and run again; nothing else is needed. This is the same rule as a
+  hand-edited skill file, with the deletion standing in for `--forget`.
+- **Broken markers** (one without the other, two of a kind, end before begin)
+  are an integrity refusal with exit 1.
+
+### The manifest (`schemaVersion: 5`)
+
+```json
+{
+  "schemaVersion": 5,
+  "source": {"repo": "dep0we/skills", "commit": "<pin used by the latest skills run>"},
+  "skills": {
+    "test-driven-development": {
+      "folder": "vendor/superpowers/test-driven-development",
+      "commit": "<pin this skill was laid from>",
+      "installedAt": "<ISO 8601 timestamp>",
+      "files": [
+        {"path": ".claude/skills/test-driven-development/SKILL.md", "sha256": "<what the tool last recorded>"},
+        {"path": ".agents/skills/test-driven-development/SKILL.md", "sha256": "<what the tool last recorded>"}
+      ]
+    }
+  },
+  "rules": {
+    "file": "AGENTS.md",
+    "source": "$SYSTEMS_ROOT/projects/agent-config/shared-rules.md",
+    "sourceSha256": "<sha256 of the rules source>",
+    "blockSha256": "<sha256 of the block, markers included>",
+    "installedAt": "<ISO 8601 timestamp>"
+  }
+}
+```
+
+- There is no pack concept. The key under `skills` is the skill name.
+- `commit` is per skill, because a later run can name only some skills and move
+  them to a newer pin while the rest stay where they were. `source.commit` is
+  the pin of the latest run that laid skills.
+- `rules.source` is a label. A path under `SYSTEMS_ROOT` is written with the
+  literal `$SYSTEMS_ROOT` in front, anything else as a bare file name. No
+  machine path is ever recorded.
+- The per-file `sha256` is the tool's, as in schema 4: it drives hand-edit
+  detection and `--forget`, and nothing else.
+- Everything in this file is evidence, never authority, under the trust model in
+  section 4. `folder`, `commit` and `source` name no fetch target for a reader.
+
+**Licence notices.** When a laid skill's folder has no licence file of its own
+(`LICENSE`, `LICENSE.md`, `LICENSE.txt`, `COPYING`), the tool copies the nearest
+ancestor folder's licence at the pinned commit into the skill as `LICENSE`, so
+`vendor/<set>/LICENSE` reaches every destination directory. It is recorded in
+`files` with its hash like any other laid file. The walk stops before the
+repository root, and a skill with no ancestor licence gets none.
+
+**Reading a schema 4 manifest.** The tool reads one and lists it (`--list` says
+it is schema 4), and `--dry-run` works over it. **A write run does not rewrite
+it.** Any write run (`--skills`, `--rules`, `--forget`) against a schema 4
+project stops with exit 1, writes nothing, and says the repo was laid by the old
+tool, that its own checks read the old format, and that those checks must be
+upgraded first (a separate change in that repo) before re-running with
+`--upgrade-manifest`. The reason is concrete: one project's setup check reads only
+`manifest.packs`, so a schema 5 rewrite drops its checked files to zero with no
+error, and a default both-directories lay can create a directory that check
+rejects. With `--upgrade-manifest` the write upgrades it: each skill becomes its
+own entry, every recorded path and hash is carried over unchanged, and the pack
+it came from is kept under `legacy` (pack name, pack version, pack commit,
+upstream). A skill with `legacy` and no `folder` is tracked but not re-laid. If
+it is listed in `primary-set.txt` it is re-laid from the source and the marker
+is dropped. If it is not listed, it stays recorded, runs report it as not named,
+and its files are left alone. Schema 1 and unknown versions are still refused.
+
+**What this does to the merge gate in section 4.** Section 4 is the contract for
+schema 4, and nothing in it has been rewritten. A reader that implements only
+schema 4 reports a schema 5 manifest as `unsupported schema — unrecognised`,
+which excludes nothing, so those files get a full review. That is safe and it is
+also a regression: a project only becomes schema 5 when someone runs `--upgrade-manifest`,
+and its vendored files lose their exclusion from then until the gate learns
+schema 5. The gate would take the publishing repository (`dep0we/skills`) as a
+constant, the commit from the baseline manifest, the folder from
+`primary-set.txt` at that commit rather than from the manifest, and the hashes
+from the blobs at that commit. A commit hash needs no tag protection rule. This
+is recorded as an update to the ruling in
+`docs/decisions/2026-08-20-gate-asks-skillstack-for-shipped-hashes.md` and is
+not built here.
+
 ## 4. The manifest shape
+
+**Since 2026-10-19 this section is the schema 4 contract.** The tool writes
+schema 5 now (section 3a). The trust model below carries over unchanged. The
+release tag, `files.json` and the outcomes are schema 4 mechanics for packs that
+no longer ship from here, and a gate for schema 5 needs the update described at
+the end of section 3a.
 
 **This is the load-bearing decision in this document**, because a project
 repository's manifest is read by a party outside this repository entirely:

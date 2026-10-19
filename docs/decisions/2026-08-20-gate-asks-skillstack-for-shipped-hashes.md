@@ -92,3 +92,58 @@ Creating the tag protection rule this design requires is a repository setting
 and remains the maintainer's call. Until it exists, and until the first
 release tag is cut, every project resolves `release not found` and nothing is
 excluded anywhere.
+
+## Update, 2026-10-19: the source of skills changed
+
+`bin/lay-pack.sh` no longer lays from `packs/`. It lays from `dep0we/skills` at
+a pinned commit and writes schema 5 manifests. See
+`2026-10-19-skills-come-from-one-pinned-source.md`. This section records what
+that does to the ruling above. The ruling itself is not reopened.
+
+**What still holds, unchanged:** the gate does not trust the hash list in the
+project under review. Anything the change under review can write is evidence,
+never authority. Identity comes from the manifest already merged into the target
+branch. The publishing repository is a constant compiled into the gate. An
+unreachable source must never read as "no differences".
+
+**What breaks:** the schema 4 gate cannot validate a schema 5 manifest.
+
+- It implements schema 4 only, so a schema 5 baseline reports `unsupported
+  schema — unrecognised` and nothing is excluded. This fails safe and loudly, and
+  it is the outcome the contract already names for "needs the gate upgraded".
+- Even upgraded to read schema 5's shape, the old lookup finds nothing. It
+  derives the tag `<pack>-v<version>` in `dep0we/skillstack` and fetches
+  `packs/<pack>/files.json`. Schema 5 has no pack name or pack version, and no
+  new release is cut in this repository for skills that now ship from
+  `dep0we/skills`.
+- The four projects holding a schema 4 manifest keep validating, because
+  `superpowers-v0.1.0` and `packs/superpowers/files.json` stay in this
+  repository. A project only becomes schema 5 when someone runs the tool with
+  `--upgrade-manifest`; a plain write run refuses. From then its exclusion stops
+  until the gate is updated.
+
+**What a schema 5 gate would need.** These are the same rules applied to the new
+inputs, not new rules.
+
+| Input | Class | Note |
+| --- | --- | --- |
+| Publishing repository `dep0we/skills` | constant | Compiled into the gate, never read from a manifest |
+| Schema version, 5 | constant | The gate's own |
+| Skill names and their file paths | authority, from the baseline manifest | Same reasoning as the `files` array in schema 4 |
+| Commit | authority, from the baseline manifest | A full commit hash, validated as 40 hex characters before use |
+| Folder a skill came from | derived | Read from `primary-set.txt` at that commit, never from the manifest's `folder` |
+| Hash of each file | published | SHA-256 of the blob at `<folder>/<rest>` at that commit |
+| `source`, `folder`, per-skill `commit`, `rules`, `installedAt` | evidence | Reported, never resolved |
+
+A commit hash is immutable by construction, so the tag protection ruleset is not
+needed for this path. The remaining hazard is that a commit nobody can fetch
+(history rewritten, repository private) must report as the source being
+unreachable, never as a match.
+
+**`rules` is not skill content.** The managed block in `AGENTS.md` is not under
+an allowed skill directory and is not recorded in `files`. A gate has nothing to
+exclude there, and the block gets reviewed as ordinary project content.
+
+**Not built.** This repository has not changed any gate. Whether the kit
+repository already implements a schema 4 gate was not checked. The update to the
+gate is the maintainer's call and belongs to whoever owns that repository.

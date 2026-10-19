@@ -20,34 +20,57 @@ declaration that keeps a shipped script running on a current Node runtime.
 `skillstack` exists so that work happens once, in one place, and every project
 gets the same result.
 
-## Laying a pack into a project
+## Laying skills into a project
 
 ```
-bin/lay-pack.sh --pack superpowers --skills a,b,c /path/to/project
+bin/lay-pack.sh --skills a,b,c [--rules] [--targets agents|both] /path/to/project
+bin/lay-pack.sh --rules /path/to/project
 ```
 
-Run it without `--skills` to see what a pack contains. There is deliberately
-no way to say "all of them": taking every skill is how one project ended up
-with 165 of its 194 tracked files being skill copies.
+Skills come from one place: the `dep0we/skills` repository, at the commit named
+in `source.lock`. Dan's machines install from the same commit, so a copy in a
+project matches what runs on them. The tool reads a clone at `SKILLS_REPO`
+(default `~/Projects/skills`), takes names from `primary-set.txt` at the pinned
+commit, and reads the files from that commit, not from the clone's working tree.
+If the clone lacks the pinned commit, the run stops and prints the fetch command
+to run. It never fetches. `--pack` is retired and says so.
 
-Files are written into `.claude/skills/` and `.agents/skills/`, which is the
-minimum set covering Claude Code, Codex and Cursor. Which reader loads which
-directory was measured, not read from documentation; see
+Run it with neither `--skills` nor `--rules` to see which skills are listed.
+There is deliberately no way to say "all of them": taking every skill is how one
+project ended up with 165 of its 194 tracked files being skill copies.
+
+`--targets both` (the default) writes `.agents/skills/` and `.claude/skills/`,
+the minimum set covering Claude Code, Codex and Cursor. `--targets agents`
+writes `.agents/skills/` only. A skill whose folder has no licence file gets the
+nearest ancestor's `LICENSE` from the pinned commit copied in, so the upstream
+notice travels with every copy. Which reader loads which directory was measured,
+not read from documentation; see
 `docs/decisions/2026-08-23-skill-directories-measured.md`.
 
+`--rules` keeps a managed block at the top of the project's `AGENTS.md`, between
+`<!-- shared-rules:begin -->` and `<!-- shared-rules:end -->`, and touches
+nothing outside those lines. The text comes from `SHARED_RULES_FILE` (default
+`$SYSTEMS_ROOT/projects/agent-config/shared-rules.md`). A source that holds a
+machine path, a credential or an address is refused. Re-running with an
+unchanged source changes nothing. A block edited by hand is reported and skipped.
+
 The tool records every file it writes, with a hash, in `.vendored-skills.json`
-at the project root. On a later run, a file whose hash has moved since it was
-laid down is reported and skipped rather than overwritten, and the run exits 2.
+at the project root (schema 5). It still reads the schema 4 files that the old
+pack tool wrote. A write run against a schema 4 project stops with exit 1 and
+writes nothing, because a project's own checks may read only the old format;
+`--upgrade-manifest` is the explicit way through, and it keeps every recorded
+hash. `--list` and `--dry-run` still read schema 4. On a later run, a file whose hash has moved since it was laid down is
+reported and skipped rather than overwritten, and the run exits 2.
 `--forget <skill>` is the one deliberate way past that, and it deletes nothing.
 Nothing this tool does ever deletes a file.
 
-It also appends one ignore rule, `.superpowers/`, to the project's
-`.gitignore`. The skills being copied in write live session state into the
-working tree the moment they run, including a session key in cleartext, and
-laying them down without that rule leaves a project one `git add -A` away from
-committing a live credential. Four repositories had to add the rule by hand
-before this was the tool's job. It is appended, never rewritten, a target that
-already has the rule is left byte-identical, and session state that is
+When skills are laid it also appends one ignore rule, `.superpowers/`, to the
+project's `.gitignore`. The skills being copied in write live session state into
+the working tree the moment they run, including a session key in cleartext, and
+laying them down without that rule leaves a project one stage-everything commit
+away from committing a live credential. Four repositories had to add the rule by
+hand before this was the tool's job. It is appended, never rewritten, a target
+that already has the rule is left byte-identical, and session state that is
 **already committed** is named in the report rather than papered over, because
 an ignore rule does not untrack a file. See "What the tool writes into a
 project" in `docs/SPEC.md`.
@@ -57,9 +80,10 @@ project already holds.
 
 ## What's here
 
-- `packs/<name>/` — the corrected snapshot that ships, its corrections as a
-  separate record, and the upstream copyright notice the licence requires to
-  travel with a copy.
+- `source.lock` — the commit of `dep0we/skills` that every skill is laid from.
+- `packs/<name>/` — **superseded 2026-10-19.** The old corrected snapshot, kept
+  because schema 4 manifests and the schema 4 gate contract refer to it. See
+  `packs/README.md`.
 - `bin/lay-pack.sh` — the layering tool, and `test/` its suite.
 - `docs/SPEC.md` — the full design, including the manifest shape a project
   carries afterwards, which a separate reader in another repository (a merge

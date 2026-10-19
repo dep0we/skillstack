@@ -10,12 +10,12 @@ t="$(new_target)" || exit 1
 out="$(new_out)"
 m="$t/.vendored-skills.json"
 
-run_lay "$out" --pack "$PACK" --skills "executing-plans" "$t"
+run_lay "$out" --skills "executing-plans" "$t"
 check_eq "first lay-down clean" 0 "$?"
 
 doctor() {  # doctor <bad path>
   jq --arg bad "$1" \
-    '.packs.superpowers.files += [{path:$bad, sha256:"0000000000000000000000000000000000000000000000000000000000000000"}]' \
+    '.skills["executing-plans"].files += [{path:$bad, sha256:"0000000000000000000000000000000000000000000000000000000000000000"}]' \
     "$m" > "$m.x" && mv "$m.x" "$m"
 }
 
@@ -35,7 +35,7 @@ do
     fail "the doctored entry '$bad' did not land, so this case proved nothing"
     cp "$m.orig" "$m"; continue
   fi
-  run_lay "$out" --pack "$PACK" --skills "brainstorming" "$t"
+  run_lay "$out" --skills "brainstorming" "$t"
   rc=$?
   check_eq "refuses a carried-forward '$bad'" 1 "$rc"
   check "names the path it refused ($bad)" grep -Fq "$bad" "$out"
@@ -45,7 +45,7 @@ rm -f "$m.orig"
 
 # And the identical command has to succeed once the manifest is honest again,
 # or every refusal above could have been caused by anything at all.
-run_lay "$out" --pack "$PACK" --skills "brainstorming" "$t"
+run_lay "$out" --skills "brainstorming" "$t"
 check_eq "the same command succeeds on an undoctored manifest" 2 "$?"
 check_fails "and refuses nothing" grep -q "refusing this manifest" "$out"
 
@@ -75,7 +75,7 @@ do
   rc=$?
   check_eq "--list refuses '$bad'" 1 "$rc"
   check "--list names the path it refused ($bad)" grep -Fq "$bad" "$out"
-  check_fails "--list printed no listing for '$bad'" grep -q "packVersion:" "$out"
+  check_fails "--list printed no listing for '$bad'" grep -q "skill: executing-plans" "$out"
   cp "$m.orig" "$m"
 done
 rm -f "$m.orig"
@@ -84,7 +84,7 @@ rm -f "$m.orig"
 # every refusal it just made could have had any cause at all.
 run_lay "$out" --list "$t"
 check_eq "--list succeeds on an undoctored manifest" 0 "$?"
-check "--list still prints the listing" grep -q "packVersion:" "$out"
+check "--list still prints the listing" grep -q "skill: executing-plans" "$out"
 check_fails "and refuses nothing" grep -q "refusing this manifest" "$out"
 
 rm -rf "$t" "$out"
