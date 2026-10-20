@@ -9,6 +9,9 @@ text under it.
 
 ## [Unreleased]
 
+- **`source.lock` now pins `dep0we/skills` at 6f096c5**, the same commit as
+  claude-config's `skills.lock`. That commit lets a machine's own rules win in
+  four skills that point at personal destinations.
 - **`lay-pack.sh` now lays skills only from `dep0we/skills`, at the commit in
   the new `source.lock`.** Dan's machines install from that one pinned source,
   and a project copy taken from `packs/` would drift from it. The tool reads a
